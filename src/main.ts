@@ -8,7 +8,27 @@ async function bootstrap() {
 
   // 啟用 CORS
   app.enableCors({
-    origin: ['http://localhost:3030'],
+    origin: (origin, callback) => {
+      // 允許的來源
+      const allowedOrigins = [
+        'http://localhost:3030',
+        /^https:\/\/.*\.zeabur\.app$/, // 允許所有 zeabur.app 子網域
+      ];
+
+      // 如果沒有 origin（如 Postman 或服務器端請求），則允許
+      if (!origin) return callback(null, true);
+
+      // 檢查是否為允許的來源
+      const isAllowed = allowedOrigins.some((allowedOrigin) => {
+        if (typeof allowedOrigin === 'string') {
+          return origin === allowedOrigin;
+        } else {
+          return allowedOrigin.test(origin);
+        }
+      });
+
+      callback(null, isAllowed);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
