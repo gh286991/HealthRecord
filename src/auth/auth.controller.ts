@@ -5,11 +5,13 @@ import {
   UseGuards,
   Request,
   Get,
+  Patch,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { LoginDto } from './dto/login.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -31,5 +33,14 @@ export class AuthController {
   @Get('profile')
   getProfile(@Request() req) {
     return req.user;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Patch('profile')
+  updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
+    return this.authService.updateProfile(
+      req.user.userId || req.user.sub,
+      updateUserDto,
+    );
   }
 }
