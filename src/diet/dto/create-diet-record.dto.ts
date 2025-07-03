@@ -58,3 +58,30 @@ export class CreateDietRecordDto {
   @IsString()
   photoUrl?: string;
 }
+
+export class CreateDietRecordWithPhotoDto {
+  @ApiProperty({ description: '日期', example: '2024-01-15' })
+  @IsDateString()
+  date: string;
+
+  @ApiProperty({
+    description: '餐次類型',
+    enum: ['早餐', '午餐', '晚餐', '點心'],
+  })
+  @IsEnum(['早餐', '午餐', '晚餐', '點心'])
+  mealType: string;
+
+  @ApiProperty({
+    description: '食物項目列表 (JSON 字串格式)',
+    required: false,
+    example: '[{"foodId":"507f1f77bcf86cd799439011","quantity":1.5}]',
+  })
+  @IsOptional()
+  @IsString()
+  foods?: string;
+
+  @ApiProperty({ description: '備註', required: false })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

@@ -5,6 +5,7 @@ import { DietRecord, DietRecordDocument } from './schemas/diet-record.schema';
 import { CreateDietRecordDto } from './dto/create-diet-record.dto';
 import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
 import { FoodService } from '../food/food.service';
+import { MinioService } from '../common/services/minio.service';
 
 @Injectable()
 export class DietService {
@@ -12,6 +13,7 @@ export class DietService {
     @InjectModel(DietRecord.name)
     private dietRecordModel: Model<DietRecordDocument>,
     private foodService: FoodService,
+    private minioService: MinioService,
   ) {}
 
   async create(
@@ -249,5 +251,63 @@ export class DietService {
         totalSodium: 0,
       },
     );
+  }
+
+  /**
+   * 建立飲食紀錄（包含照片上傳）
+   * @param userId 使用者 ID
+   * @param createDietRecordDto 飲食紀錄資料
+   * @param file 上傳的照片檔案（可選）
+   * @returns 建立的飲食紀錄
+   */
+  async createWithPhoto(
+    userId: string,
+    createDietRecordDto: CreateDietRecordDto,
+    file?: Express.Multer.File,
+  ): Promise<DietRecord> {
+    const { foods, ...rest } = createDietRecordDto;
+
+    // 處理食物項目並計算營養成分
+    let processedFoods = [];
+    let totals = {
+      totalCalories: 0,
+      totalProtein: 0,
+      totalCarbohydrates: 0,
+      totalFat: 0,
+      totalFiber: 0,
+      totalSugar: 0,
+      totalSodium: 0,
+    };
+
+    if (foods && foods.length > 0) {
+      processedFoods = await this.processFoodItems(foods);
+      totals = this.calculateTotals(processedFoods);
+    }
+
+    // 處理照片上傳
+    let photoUrl = createDietRecordDto.photoUrl || '';
+    if (file) {
+      const fileName = this.minioService.generateUniqueFileName(
+        file.originalname,
+      );
+
+      photoUrl = await this.minioService.uploadFile(
+        fileName,
+        file.buffer,
+        file.mimetype,
+        'diet-records',
+      );
+    }
+
+    const dietRecord = new this.dietRecordModel({
+      userId: new Types.ObjectId(userId),
+      date: new Date(createDietRecordDto.date),
+      ...rest,
+      foods: processedFoods,
+      photoUrl: `https://${photoUrl}`,
+      ...totals,
+    });
+
+    return dietRecord.save();
   }
 }

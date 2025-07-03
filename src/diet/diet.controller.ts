@@ -20,7 +20,10 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { DietService } from './diet.service';
-import { CreateDietRecordDto } from './dto/create-diet-record.dto';
+import {
+  CreateDietRecordDto,
+  CreateDietRecordWithPhotoDto,
+} from './dto/create-diet-record.dto';
 import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -40,6 +43,83 @@ export class DietController {
   @ApiOperation({ summary: '建立飲食紀錄' })
   create(@Request() req, @Body() createDietRecordDto: CreateDietRecordDto) {
     return this.dietService.create(req.user.userId, createDietRecordDto);
+  }
+
+  @Post('with-photo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      fileFilter: (req, file, cb) => {
+        const allowedMimes = [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/gif',
+          'image/webp',
+        ];
+
+        if (!allowedMimes.includes(file.mimetype)) {
+          return cb(
+            new Error('只允許上傳 JPG、JPEG、PNG、GIF、WebP 格式的圖片檔案'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+        date: {
+          type: 'string',
+          format: 'date',
+          description: '日期',
+          example: '2024-01-15',
+        },
+        mealType: {
+          type: 'string',
+          enum: ['早餐', '午餐', '晚餐', '點心'],
+          description: '餐次類型',
+        },
+        foods: {
+          type: 'string',
+          description: '食物項目列表 (JSON 字串)',
+          example: '[{"foodId":"507f1f77bcf86cd799439011","quantity":1.5}]',
+        },
+        notes: {
+          type: 'string',
+          description: '備註',
+        },
+      },
+      required: ['date', 'mealType'],
+    },
+  })
+  @ApiOperation({ summary: '建立飲食紀錄（包含照片上傳）' })
+  async createWithPhoto(
+    @Request() req,
+    @Body() body: CreateDietRecordWithPhotoDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    // 從 multipart/form-data 解析資料
+    const createDietRecordDto: CreateDietRecordDto = {
+      date: body.date,
+      mealType: body.mealType,
+      foods: body.foods ? JSON.parse(body.foods) : undefined,
+      notes: body.notes,
+    };
+
+    return this.dietService.createWithPhoto(
+      req.user.userId,
+      createDietRecordDto,
+      file,
+    );
   }
 
   @Get()

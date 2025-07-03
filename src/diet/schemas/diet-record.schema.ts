@@ -80,5 +80,5 @@ export class DietRecord {
 
 export const DietRecordSchema = SchemaFactory.createForClass(DietRecord);
 
-// 建立複合索引，確保同一用戶在同一天同一餐次只有一筆紀錄
-DietRecordSchema.index({ userId: 1, date: 1, mealType: 1 }, { unique: true });
+// 建立複合索引，方便查詢同一用戶在同一天同一餐次的紀錄
+DietRecordSchema.index({ userId: 1, date: 1, mealType: 1 });
