@@ -23,7 +23,7 @@ export class WorkoutSet {
   @Prop({ required: true, min: 1 })
   reps: number;
 
-  @Prop({ min: 1 })
+  @Prop({ min: 0 })
   restSeconds?: number; // 休息秒數
 
   @Prop({ min: 1, max: 10 })
@@ -35,8 +35,8 @@ export class WorkoutExercise {
   @Prop({ required: true })
   exerciseName: string; // 動作名稱，如 Bench Press
 
-  @Prop({ enum: BodyPart, required: false })
-  bodyPart?: BodyPart; // 訓練部位
+  @Prop({ required: false })
+  bodyPart?: string; // 訓練部位
 
   @Prop({ type: String, required: true })
   exerciseId: string; // 對應資料庫中的固定 ID
@@ -67,6 +67,12 @@ export class WorkoutRecord {
 
   @Prop({ default: 0 })
   totalReps: number;
+
+  @Prop({ default: 0 })
+  workoutDurationSeconds: number; // 本次訓練總時長（秒）
+
+  @Prop({ default: 0 })
+  totalRestSeconds: number; // 總休息秒數（由各組 restSeconds 加總）
 }
 
 export const WorkoutRecordSchema = SchemaFactory.createForClass(WorkoutRecord);

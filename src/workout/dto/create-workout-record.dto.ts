@@ -16,7 +16,7 @@ export class CreateWorkoutSetDto {
   @ApiProperty({ description: '休息秒數', required: false, example: 90 })
   @IsOptional()
   @IsNumber()
-  @Min(1)
+  @Min(0)
   restSeconds?: number;
 
   @ApiProperty({ description: 'RPE (1-10)', required: false, example: 8 })
@@ -31,6 +31,11 @@ export class CreateWorkoutExerciseDto {
   @IsString()
   @IsNotEmpty()
   exerciseName: string;
+
+  @ApiProperty({ description: '身體部位', example: '胸部' })
+  @IsString()
+  @IsNotEmpty()
+  bodyPart: string;
 
   @ApiProperty({ description: '動作 ID' })
   @IsMongoId()
@@ -59,6 +64,18 @@ export class CreateWorkoutRecordDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ description: '本次訓練總時長（秒）', required: false, example: 3600 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  workoutDurationSeconds?: number;
+
+  @ApiProperty({ description: '總休息秒數（由各組 restSeconds 加總）', required: false, example: 600 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  totalRestSeconds?: number;
 }
 
 

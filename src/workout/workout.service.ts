@@ -19,6 +19,11 @@ export class WorkoutService {
     const { exercises, ...rest } = dto;
 
     const computed = this.computeTotals(exercises);
+    // 若前端有送休息或時長，合併；否則自行依 sets 計算 totalRestSeconds（保守計）
+    const totalRestSeconds =
+      typeof dto.totalRestSeconds === 'number'
+        ? dto.totalRestSeconds
+        : this.computeTotalRestSeconds(exercises as any);
 
     const record = new this.workoutRecordModel({
       userId: new Types.ObjectId(userId),
@@ -26,6 +31,7 @@ export class WorkoutService {
       exercises,
       ...rest,
       ...computed,
+      totalRestSeconds,
     });
     return record.save();
   }
@@ -63,6 +69,9 @@ export class WorkoutService {
       updateData.exercises = exercises;
       const computed = this.computeTotals(exercises);
       Object.assign(updateData, computed);
+      if (typeof rest.totalRestSeconds !== 'number') {
+        updateData.totalRestSeconds = this.computeTotalRestSeconds(exercises as any);
+      }
     }
     if (rest.date) {
       updateData.date = new Date(rest.date);
@@ -133,6 +142,18 @@ export class WorkoutService {
       }
     }
     return { totalVolume, totalSets, totalReps };
+  }
+
+  private computeTotalRestSeconds(
+    exercises: Array<{ sets?: Array<{ restSeconds?: number }> }>,
+  ) {
+    let total = 0;
+    for (const exercise of exercises || []) {
+      for (const set of exercise.sets || []) {
+        total += set.restSeconds || 0;
+      }
+    }
+    return total;
   }
 
   // 內建常用動作清單（可依部位過濾）
