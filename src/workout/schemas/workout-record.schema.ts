@@ -3,6 +3,18 @@ import { Document, Types } from 'mongoose';
 
 export type WorkoutRecordDocument = WorkoutRecord & Document;
 
+// 訓練部位列舉
+export enum BodyPart {
+  Chest = '胸',
+  Back = '背',
+  Legs = '腿',
+  Shoulders = '肩',
+  Arms = '手臂',
+  Core = '核心',
+  FullBody = '全身',
+  Other = '其他',
+}
+
 @Schema({ _id: false })
 export class WorkoutSet {
   @Prop({ required: true, min: 0 })
@@ -22,6 +34,12 @@ export class WorkoutSet {
 export class WorkoutExercise {
   @Prop({ required: true })
   exerciseName: string; // 動作名稱，如 Bench Press
+
+  @Prop({ enum: BodyPart, required: false })
+  bodyPart?: BodyPart; // 訓練部位
+
+  @Prop({ type: String, required: true })
+  exerciseId: string; // 對應資料庫中的固定 ID
 
   @Prop({ type: [WorkoutSet], default: [] })
   sets: WorkoutSet[];

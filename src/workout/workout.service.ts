@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { WorkoutRecord, WorkoutRecordDocument } from './schemas/workout-record.schema';
+import { WorkoutRecord, WorkoutRecordDocument, BodyPart } from './schemas/workout-record.schema';
+import { Exercise, ExerciseDocument } from './schemas/exercise.schema';
 import { CreateWorkoutRecordDto } from './dto/create-workout-record.dto';
 import { UpdateWorkoutRecordDto } from './dto/update-workout-record.dto';
 
@@ -10,6 +11,8 @@ export class WorkoutService {
   constructor(
     @InjectModel(WorkoutRecord.name)
     private workoutRecordModel: Model<WorkoutRecordDocument>,
+    @InjectModel(Exercise.name)
+    private exerciseModel: Model<ExerciseDocument>,
   ) {}
 
   async create(userId: string, dto: CreateWorkoutRecordDto): Promise<WorkoutRecord> {
@@ -130,6 +133,41 @@ export class WorkoutService {
       }
     }
     return { totalVolume, totalSets, totalReps };
+  }
+
+  // 內建常用動作清單（可依部位過濾）
+  getCommonExercises(bodyPart?: BodyPart) {
+    // 從資料庫讀取（只回傳啟用項目）；若資料庫為空，會自動種子初始化
+    const filter: any = { isActive: true };
+    if (bodyPart) filter.bodyPart = bodyPart;
+    return this.exerciseModel
+      .countDocuments({})
+      .then(async (count) => {
+        if (count === 0) {
+          const defaults: Array<{ name: string; bodyPart: BodyPart }> = [
+            { name: '臥推 (Bench Press)', bodyPart: BodyPart.Chest },
+            { name: '上斜啞鈴臥推 (Incline DB Press)', bodyPart: BodyPart.Chest },
+            { name: '深蹲 (Squat)', bodyPart: BodyPart.Legs },
+            { name: '硬舉 (Deadlift)', bodyPart: BodyPart.Back },
+            { name: '槓鈴划船 (Barbell Row)', bodyPart: BodyPart.Back },
+            { name: '肩推 (Overhead Press)', bodyPart: BodyPart.Shoulders },
+            { name: '側平舉 (Lateral Raise)', bodyPart: BodyPart.Shoulders },
+            { name: '二頭彎舉 (Biceps Curl)', bodyPart: BodyPart.Arms },
+            { name: '三頭下拉 (Triceps Pushdown)', bodyPart: BodyPart.Arms },
+            { name: '棒式 (Plank)', bodyPart: BodyPart.Core },
+            { name: '臀推 (Hip Thrust)', bodyPart: BodyPart.Legs },
+            { name: '引體向上 (Pull-up)', bodyPart: BodyPart.Back },
+          ];
+          await this.exerciseModel.insertMany(
+            defaults.map((d) => ({ ...d, isActive: true })),
+            { ordered: false },
+          ).catch(() => undefined);
+        }
+        return this.exerciseModel
+          .find(filter)
+          .sort({ bodyPart: 1, name: 1 })
+          .lean();
+      });
   }
 }
 

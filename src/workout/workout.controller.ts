@@ -4,6 +4,7 @@ import { WorkoutService } from './workout.service';
 import { CreateWorkoutRecordDto } from './dto/create-workout-record.dto';
 import { UpdateWorkoutRecordDto } from './dto/update-workout-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { BodyPart } from './schemas/workout-record.schema';
 
 @ApiTags('健身紀錄')
 @Controller('workout-records')
@@ -46,6 +47,18 @@ export class WorkoutController {
   @ApiOperation({ summary: '刪除健身紀錄' })
   remove(@Request() req, @Param('id') id: string) {
     return this.workoutService.remove(req.user.userId, id);
+  }
+
+  @Get('common/exercises')
+  @ApiOperation({ summary: '取得內建常用動作清單（可用部位過濾）' })
+  getCommonExercises(@Query('bodyPart') bodyPart?: BodyPart) {
+    return this.workoutService.getCommonExercises(bodyPart);
+  }
+
+  @Get('common/body-parts')
+  @ApiOperation({ summary: '取得訓練部位列舉' })
+  getBodyParts() {
+    return Object.values(BodyPart);
   }
 }
 

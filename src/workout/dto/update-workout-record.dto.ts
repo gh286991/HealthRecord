@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsMongoId, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
 export class UpdateWorkoutSetDto {
   @ApiProperty({ description: '重量(kg)', required: false })
@@ -33,6 +33,11 @@ export class UpdateWorkoutExerciseDto {
   @IsOptional()
   @IsString()
   exerciseName?: string;
+
+  @ApiProperty({ description: '動作 ID', required: false })
+  @IsOptional()
+  @IsMongoId()
+  exerciseId?: string;
 
   @ApiProperty({ type: [UpdateWorkoutSetDto], required: false })
   @IsOptional()
