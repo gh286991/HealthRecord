@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { FoodModule } from './food/food.module';
 import { DietModule } from './diet/diet.module';
+import { WorkoutModule } from './workout/workout.module';
 import { CommonModule } from './common/common.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { CommonModule } from './common/common.module';
     AuthModule,
     FoodModule,
     DietModule,
+    WorkoutModule,
   ],
   controllers: [AppController],
   providers: [AppService],
