@@ -28,6 +28,9 @@ export class WorkoutSet {
 
   @Prop({ min: 1, max: 10 })
   rpe?: number; // 主觀用力程度（1-10）
+
+  @Prop({ default: false })
+  completed?: boolean; // 是否完成此組
 }
 
 @Schema({ _id: false })

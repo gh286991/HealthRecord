@@ -26,6 +26,10 @@ export class UpdateWorkoutSetDto {
   @IsNumber()
   @Min(1)
   rpe?: number;
+
+  @ApiProperty({ description: '是否完成', required: false })
+  @IsOptional()
+  completed?: boolean;
 }
 
 export class UpdateWorkoutExerciseDto {
