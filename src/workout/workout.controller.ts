@@ -5,6 +5,7 @@ import { CreateWorkoutRecordDto } from './dto/create-workout-record.dto';
 import { UpdateWorkoutRecordDto } from './dto/update-workout-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BodyPart } from './schemas/workout-record.schema';
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 
 @ApiTags('健身紀錄')
 @Controller('workout-records')
@@ -50,15 +51,50 @@ export class WorkoutController {
   }
 
   @Get('common/exercises')
-  @ApiOperation({ summary: '取得內建常用動作清單（可用部位過濾）' })
-  getCommonExercises(@Query('bodyPart') bodyPart?: BodyPart) {
-    return this.workoutService.getCommonExercises(bodyPart);
+  @ApiOperation({ summary: '取得（內建＋使用者自訂）動作清單（可用部位過濾）' })
+  getCommonExercises(@Request() req, @Query('bodyPart') bodyPart?: BodyPart) {
+    // 為了相容前端既有呼叫，這裡直接回傳合併清單
+    return this.workoutService.getAllExercises(req.user.userId, bodyPart);
+  }
+
+  @Get('exercises')
+  @ApiOperation({ summary: '取得內建＋使用者自訂動作清單（可部位過濾）' })
+  getAllExercises(@Request() req, @Query('bodyPart') bodyPart?: BodyPart) {
+    return this.workoutService.getAllExercises(req.user.userId, bodyPart);
   }
 
   @Get('common/body-parts')
   @ApiOperation({ summary: '取得訓練部位列舉' })
   getBodyParts() {
     return Object.values(BodyPart);
+  }
+
+  // --- 使用者自訂動作 ---
+  @Get('user/exercises')
+  @ApiOperation({ summary: '取得使用者自訂動作（可用部位過濾）' })
+  getUserExercises(@Request() req, @Query('bodyPart') bodyPart?: BodyPart) {
+    return this.workoutService.getUserExercises(req.user.userId, bodyPart);
+  }
+
+  @Post('user/exercises')
+  @ApiOperation({ summary: '新增使用者自訂動作' })
+  addUserExercise(
+    @Request() req,
+    @Body() body: { name: string; bodyPart: BodyPart },
+  ) {
+    return this.workoutService.addUserExercise(req.user.userId, body);
+  }
+
+  @Patch('user/exercises/:id')
+  @ApiOperation({ summary: '更新使用者自訂動作' })
+  updateUserExercise(@Request() req, @Param('id') id: string, @Body() body: Partial<{ name: string; bodyPart: BodyPart; isActive: boolean }>) {
+    return this.workoutService.updateUserExercise(req.user.userId, id, body);
+  }
+
+  @Delete('user/exercises/:id')
+  @ApiOperation({ summary: '停用/刪除使用者自訂動作' })
+  removeUserExercise(@Request() req, @Param('id') id: string) {
+    return this.workoutService.removeUserExercise(req.user.userId, id);
   }
 }
 

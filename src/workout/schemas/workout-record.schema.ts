@@ -38,8 +38,8 @@ export class WorkoutExercise {
   @Prop({ required: true })
   exerciseName: string; // 動作名稱，如 Bench Press
 
-  @Prop({ required: false })
-  bodyPart?: string; // 訓練部位
+  @Prop({ enum: BodyPart, required: false })
+  bodyPart?: BodyPart; // 訓練部位
 
   @Prop({ type: String, required: true })
   exerciseId: string; // 對應資料庫中的固定 ID

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsMongoId, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsMongoId, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { BodyPart } from '../schemas/workout-record.schema';
 
 export class CreateWorkoutSetDto {
   @ApiProperty({ description: '重量(kg)', example: 60 })
@@ -36,10 +37,10 @@ export class CreateWorkoutExerciseDto {
   @IsNotEmpty()
   exerciseName: string;
 
-  @ApiProperty({ description: '身體部位', example: '胸部' })
-  @IsString()
+  @ApiProperty({ description: '身體部位', enum: BodyPart, example: BodyPart.Chest })
+  @IsEnum(BodyPart)
   @IsNotEmpty()
-  bodyPart: string;
+  bodyPart: BodyPart;
 
   @ApiProperty({ description: '動作 ID' })
   @IsMongoId()

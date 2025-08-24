@@ -5,6 +5,7 @@ import { WorkoutRecord, WorkoutRecordDocument, BodyPart } from './schemas/workou
 import { Exercise, ExerciseDocument } from './schemas/exercise.schema';
 import { CreateWorkoutRecordDto } from './dto/create-workout-record.dto';
 import { UpdateWorkoutRecordDto } from './dto/update-workout-record.dto';
+import { UserExercise, UserExerciseDocument } from './schemas/user-exercise.schema';
 
 @Injectable()
 export class WorkoutService {
@@ -13,6 +14,8 @@ export class WorkoutService {
     private workoutRecordModel: Model<WorkoutRecordDocument>,
     @InjectModel(Exercise.name)
     private exerciseModel: Model<ExerciseDocument>,
+    @InjectModel(UserExercise.name)
+    private userExerciseModel: Model<UserExerciseDocument>,
   ) {}
 
   async create(userId: string, dto: CreateWorkoutRecordDto): Promise<WorkoutRecord> {
@@ -189,6 +192,103 @@ export class WorkoutService {
           .sort({ bodyPart: 1, name: 1 })
           .lean();
       });
+  }
+  // 內建＋使用者自訂合併清單
+  async getAllExercises(userId: string, bodyPart?: BodyPart) {
+    try {
+      const [builtins, custom] = await Promise.all([
+        this.getCommonExercises(bodyPart),
+        this.getUserExercises(userId, bodyPart),
+      ]);
+      
+      // 確保都是陣列
+      const builtinList = Array.isArray(builtins) ? builtins : [];
+      const customList = Array.isArray(custom) ? custom : [];
+      
+      // 正規化，加上 isCustom 旗標
+      const list = [
+        ...builtinList.map((b: any) => ({ _id: b._id, name: b.name, bodyPart: b.bodyPart, isCustom: false })),
+        ...customList.map((c: any) => ({ _id: c._id, name: c.name, bodyPart: c.bodyPart, isCustom: true })),
+      ];
+      return list.sort((a: any, b: any) => {
+        if (a.bodyPart === b.bodyPart) return (a.name || '').localeCompare(b.name || '');
+        return (a.bodyPart || '').localeCompare(b.bodyPart || '');
+      });
+    } catch (error) {
+      console.error('getAllExercises error:', error);
+      // 發生錯誤時至少回傳內建清單
+      try {
+        return await this.getCommonExercises(bodyPart);
+      } catch (fallbackError) {
+        console.error('fallback getCommonExercises error:', fallbackError);
+        return [];
+      }
+    }
+  }
+  // 取得使用者自訂動作
+  async getUserExercises(userId: string, bodyPart?: BodyPart) {
+    const filter: any = { userId: new Types.ObjectId(userId), isActive: true };
+    if (bodyPart) filter.bodyPart = bodyPart;
+    return this.userExerciseModel.find(filter).sort({ bodyPart: 1, name: 1 }).lean();
+  }
+
+  // 新增使用者自訂動作
+  async addUserExercise(userId: string, payload: { name: string; bodyPart: BodyPart }) {
+    try {
+      // 先檢查是否有同名的已刪除項目，如果有就重新啟用
+      const existing = await this.userExerciseModel.findOne({
+        userId: new Types.ObjectId(userId),
+        name: payload.name,
+        bodyPart: payload.bodyPart,
+        isActive: false,
+      });
+
+      if (existing) {
+        // 重新啟用已存在的項目
+        existing.isActive = true;
+        return existing.save();
+      }
+
+      // 沒有已刪除的同名項目，建立新的
+      const doc = new this.userExerciseModel({
+        userId: new Types.ObjectId(userId),
+        name: payload.name,
+        bodyPart: payload.bodyPart,
+        isActive: true,
+      });
+      return doc.save();
+    } catch (error) {
+      // 如果還是有重複錯誤，嘗試在名稱後加上時間戳
+      if (error.code === 11000) {
+        const timestamp = Date.now().toString().slice(-4);
+        const doc = new this.userExerciseModel({
+          userId: new Types.ObjectId(userId),
+          name: `${payload.name}_${timestamp}`,
+          bodyPart: payload.bodyPart,
+          isActive: true,
+        });
+        return doc.save();
+      }
+      throw error;
+    }
+  }
+
+  // 更新使用者自訂動作
+  async updateUserExercise(userId: string, id: string, payload: Partial<{ name: string; bodyPart: BodyPart; isActive: boolean }>) {
+    return this.userExerciseModel.findOneAndUpdate(
+      { _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) },
+      payload,
+      { new: true },
+    ).exec();
+  }
+
+  // 停用/刪除使用者自訂動作
+  async removeUserExercise(userId: string, id: string) {
+    return this.userExerciseModel.findOneAndUpdate(
+      { _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) },
+      { isActive: false },
+      { new: true },
+    ).exec();
   }
 }
 
