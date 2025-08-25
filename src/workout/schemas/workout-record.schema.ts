@@ -5,14 +5,14 @@ export type WorkoutRecordDocument = WorkoutRecord & Document;
 
 // 訓練部位列舉
 export enum BodyPart {
-  Chest = '胸',
-  Back = '背',
-  Legs = '腿',
-  Shoulders = '肩',
-  Arms = '手臂',
-  Core = '核心',
-  FullBody = '全身',
-  Other = '其他',
+  Chest = 'chest',
+  Back = 'back',
+  Legs = 'legs',
+  Shoulders = 'shoulders',
+  Arms = 'arms',
+  Core = 'core',
+  FullBody = 'fullbody',
+  Other = 'other',
 }
 
 @Schema({ _id: false })

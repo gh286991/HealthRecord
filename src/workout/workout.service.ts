@@ -161,37 +161,13 @@ export class WorkoutService {
 
   // 內建常用動作清單（可依部位過濾）
   getCommonExercises(bodyPart?: BodyPart) {
-    // 從資料庫讀取（只回傳啟用項目）；若資料庫為空，會自動種子初始化
+    // 從資料庫讀取（只回傳啟用項目）
     const filter: any = { isActive: true };
     if (bodyPart) filter.bodyPart = bodyPart;
     return this.exerciseModel
-      .countDocuments({})
-      .then(async (count) => {
-        if (count === 0) {
-          const defaults: Array<{ name: string; bodyPart: BodyPart }> = [
-            { name: '臥推 (Bench Press)', bodyPart: BodyPart.Chest },
-            { name: '上斜啞鈴臥推 (Incline DB Press)', bodyPart: BodyPart.Chest },
-            { name: '深蹲 (Squat)', bodyPart: BodyPart.Legs },
-            { name: '硬舉 (Deadlift)', bodyPart: BodyPart.Back },
-            { name: '槓鈴划船 (Barbell Row)', bodyPart: BodyPart.Back },
-            { name: '肩推 (Overhead Press)', bodyPart: BodyPart.Shoulders },
-            { name: '側平舉 (Lateral Raise)', bodyPart: BodyPart.Shoulders },
-            { name: '二頭彎舉 (Biceps Curl)', bodyPart: BodyPart.Arms },
-            { name: '三頭下拉 (Triceps Pushdown)', bodyPart: BodyPart.Arms },
-            { name: '棒式 (Plank)', bodyPart: BodyPart.Core },
-            { name: '臀推 (Hip Thrust)', bodyPart: BodyPart.Legs },
-            { name: '引體向上 (Pull-up)', bodyPart: BodyPart.Back },
-          ];
-          await this.exerciseModel.insertMany(
-            defaults.map((d) => ({ ...d, isActive: true })),
-            { ordered: false },
-          ).catch(() => undefined);
-        }
-        return this.exerciseModel
-          .find(filter)
-          .sort({ bodyPart: 1, name: 1 })
-          .lean();
-      });
+      .find(filter)
+      .sort({ bodyPart: 1, name: 1 })
+      .lean();
   }
   // 內建＋使用者自訂合併清單
   async getAllExercises(userId: string, bodyPart?: BodyPart) {
@@ -289,6 +265,57 @@ export class WorkoutService {
       { isActive: false },
       { new: true },
     ).exec();
+  }
+
+  // 強制重新初始化運動項目種子數據（開發用）
+  async resetExerciseSeeds() {
+    await this.exerciseModel.deleteMany({});
+    const defaults: Array<{ name: string; bodyPart: BodyPart }> = [
+      { name: 'Bench Press', bodyPart: BodyPart.Chest },
+      { name: 'Incline Dumbbell Press', bodyPart: BodyPart.Chest },
+      { name: 'Dumbbell Flyes', bodyPart: BodyPart.Chest },
+      { name: 'Push-ups', bodyPart: BodyPart.Chest },
+      { name: 'Squat', bodyPart: BodyPart.Legs },
+      { name: 'Deadlift', bodyPart: BodyPart.Back },
+      { name: 'Romanian Deadlift', bodyPart: BodyPart.Legs },
+      { name: 'Hip Thrust', bodyPart: BodyPart.Legs },
+      { name: 'Lunges', bodyPart: BodyPart.Legs },
+      { name: 'Leg Press', bodyPart: BodyPart.Legs },
+      { name: 'Calf Raises', bodyPart: BodyPart.Legs },
+      { name: 'Barbell Row', bodyPart: BodyPart.Back },
+      { name: 'Pull-up', bodyPart: BodyPart.Back },
+      { name: 'Lat Pulldown', bodyPart: BodyPart.Back },
+      { name: 'T-Bar Row', bodyPart: BodyPart.Back },
+      { name: 'Overhead Press', bodyPart: BodyPart.Shoulders },
+      { name: 'Lateral Raise', bodyPart: BodyPart.Shoulders },
+      { name: 'Rear Delt Flyes', bodyPart: BodyPart.Shoulders },
+      { name: 'Front Raise', bodyPart: BodyPart.Shoulders },
+      { name: 'Shrugs', bodyPart: BodyPart.Shoulders },
+      { name: 'Biceps Curl', bodyPart: BodyPart.Arms },
+      { name: 'Hammer Curl', bodyPart: BodyPart.Arms },
+      { name: 'Preacher Curl', bodyPart: BodyPart.Arms },
+      { name: 'Triceps Pushdown', bodyPart: BodyPart.Arms },
+      { name: 'Overhead Triceps Extension', bodyPart: BodyPart.Arms },
+      { name: 'Close-Grip Bench Press', bodyPart: BodyPart.Arms },
+      { name: 'Dips', bodyPart: BodyPart.Arms },
+      { name: 'Plank', bodyPart: BodyPart.Core },
+      { name: 'Crunches', bodyPart: BodyPart.Core },
+      { name: 'Russian Twists', bodyPart: BodyPart.Core },
+      { name: 'Leg Raises', bodyPart: BodyPart.Core },
+      { name: 'Mountain Climbers', bodyPart: BodyPart.Core },
+      { name: 'Burpees', bodyPart: BodyPart.FullBody },
+      { name: 'Thrusters', bodyPart: BodyPart.FullBody },
+      { name: 'Clean and Press', bodyPart: BodyPart.FullBody },
+    ];
+    
+    await this.exerciseModel.insertMany(
+      defaults.map((d) => ({ ...d, isActive: true })),
+      { ordered: false }
+    ).catch((error) => {
+      console.error('Failed to reset exercise seeds:', error);
+    });
+    
+    return { message: 'Exercise seeds reset successfully', count: defaults.length };
   }
 }
 

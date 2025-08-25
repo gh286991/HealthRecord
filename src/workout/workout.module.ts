@@ -5,6 +5,7 @@ import { WorkoutController } from './workout.controller';
 import { WorkoutRecord, WorkoutRecordSchema } from './schemas/workout-record.schema';
 import { Exercise, ExerciseSchema } from './schemas/exercise.schema';
 import { UserExercise, UserExerciseSchema } from './schemas/user-exercise.schema';
+import { ExerciseSeedService } from './exercise-seed.service';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { UserExercise, UserExerciseSchema } from './schemas/user-exercise.schema
     ]),
   ],
   controllers: [WorkoutController],
-  providers: [WorkoutService],
+  providers: [WorkoutService, ExerciseSeedService],
   exports: [WorkoutService],
 })
 export class WorkoutModule {}

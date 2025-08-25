@@ -96,6 +96,13 @@ export class WorkoutController {
   removeUserExercise(@Request() req, @Param('id') id: string) {
     return this.workoutService.removeUserExercise(req.user.userId, id);
   }
+
+  // 開發用：重新初始化運動項目種子數據
+  @Post('reset-exercise-seeds')
+  @ApiOperation({ summary: '重新初始化運動項目種子數據（開發用）' })
+  resetExerciseSeeds() {
+    return this.workoutService.resetExerciseSeeds();
+  }
 }
 
 
