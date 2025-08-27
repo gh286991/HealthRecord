@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request, ConflictException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { WorkoutService } from './workout.service';
 import { CreateWorkoutRecordDto } from './dto/create-workout-record.dto';
@@ -78,11 +78,18 @@ export class WorkoutController {
 
   @Post('user/exercises')
   @ApiOperation({ summary: '新增使用者自訂動作' })
-  addUserExercise(
+  async addUserExercise(
     @Request() req,
     @Body() body: { name: string; bodyPart: BodyPart },
   ) {
-    return this.workoutService.addUserExercise(req.user.userId, body);
+    try {
+      return await this.workoutService.addUserExercise(req.user.userId, body);
+    } catch (error) {
+      if (error.code === 11000) {
+        throw new ConflictException('您已經有相同名稱的自訂項目了');
+      }
+      throw error;
+    }
   }
 
   @Patch('user/exercises/:id')

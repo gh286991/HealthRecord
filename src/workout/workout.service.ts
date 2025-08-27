@@ -210,43 +210,29 @@ export class WorkoutService {
 
   // 新增使用者自訂動作
   async addUserExercise(userId: string, payload: { name: string; bodyPart: BodyPart }) {
-    try {
-      // 先檢查是否有同名的已刪除項目，如果有就重新啟用
-      const existing = await this.userExerciseModel.findOne({
-        userId: new Types.ObjectId(userId),
-        name: payload.name,
-        bodyPart: payload.bodyPart,
-        isActive: false,
-      });
+    // 先檢查是否有同名的已刪除項目，如果有就重新啟用
+    const existing = await this.userExerciseModel.findOne({
+      userId: new Types.ObjectId(userId),
+      name: payload.name,
+      bodyPart: payload.bodyPart,
+      isActive: false,
+    });
 
-      if (existing) {
-        // 重新啟用已存在的項目
-        existing.isActive = true;
-        return existing.save();
-      }
-
-      // 沒有已刪除的同名項目，建立新的
-      const doc = new this.userExerciseModel({
-        userId: new Types.ObjectId(userId),
-        name: payload.name,
-        bodyPart: payload.bodyPart,
-        isActive: true,
-      });
-      return doc.save();
-    } catch (error) {
-      // 如果還是有重複錯誤，嘗試在名稱後加上時間戳
-      if (error.code === 11000) {
-        const timestamp = Date.now().toString().slice(-4);
-        const doc = new this.userExerciseModel({
-          userId: new Types.ObjectId(userId),
-          name: `${payload.name}_${timestamp}`,
-          bodyPart: payload.bodyPart,
-          isActive: true,
-        });
-        return doc.save();
-      }
-      throw error;
+    if (existing) {
+      // 重新啟用已存在的項目
+      existing.isActive = true;
+      return existing.save();
     }
+
+    // 沒有已刪除的同名項目，建立新的
+    // 這邊如果名稱重複（因為 unique index），會直接拋出資料庫錯誤，這是我們想要的
+    const doc = new this.userExerciseModel({
+      userId: new Types.ObjectId(userId),
+      name: payload.name,
+      bodyPart: payload.bodyPart,
+      isActive: true,
+    });
+    return doc.save();
   }
 
   // 更新使用者自訂動作
