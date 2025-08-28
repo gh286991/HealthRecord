@@ -39,6 +39,20 @@ export class WorkoutController {
     return this.workoutService.getDailySummary(req.user.userId, date);
   }
 
+  @Get('marked-dates')
+  @ApiOperation({ summary: '取得指定月份有運動紀錄的日期' })
+  @ApiQuery({ name: 'year', required: true, type: Number, description: '年份，例如 2024' })
+  @ApiQuery({ name: 'month', required: true, type: Number, description: '月份，例如 8' })
+  getMarkedDates(
+    @Request() req,
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ) {
+    const yearNum = parseInt(year, 10);
+    const monthNum = parseInt(month, 10);
+    return this.workoutService.getMarkedDates(req.user.userId, yearNum, monthNum);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '根據 ID 取得運動紀錄' })
   findOne(@Request() req, @Param('id') id: string) {

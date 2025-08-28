@@ -235,6 +235,30 @@ export class WorkoutService {
     return { date, records, dailyTotals: summary };
   }
 
+  async getMarkedDates(userId: string, year: number, month: number): Promise<string[]> {
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      throw new BadRequestException('無效的年份或月份');
+    }
+
+    // 月份在 JS Date 中是 0-11
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const records = await this.workoutRecordModel.find({
+      userId: new Types.ObjectId(userId),
+      date: { $gte: startDate, $lte: endDate },
+    }).select('date').lean();
+
+    // 使用 Set 來取得不重複的日期
+    const markedDates = new Set<string>();
+    records.forEach(record => {
+      // 將日期轉換為 YYYY-MM-DD 格式
+      markedDates.add(record.date.toISOString().split('T')[0]);
+    });
+
+    return Array.from(markedDates);
+  }
+
   // 重命名以更明確表示用途
   private computeResistanceTotals(
     exercises: Array<{ sets?: Array<{ weight?: number; reps?: number }> }>,
