@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { WorkoutRecord, WorkoutRecordDocument, BodyPart } from './schemas/workout-record.schema';
+import { WorkoutRecord, WorkoutRecordDocument, BodyPart, WorkoutType, ResistanceData, CardioData } from './schemas/workout-record.schema';
 import { Exercise, ExerciseDocument } from './schemas/exercise.schema';
-import { CreateWorkoutRecordDto } from './dto/create-workout-record.dto';
-import { UpdateWorkoutRecordDto } from './dto/update-workout-record.dto';
+import { CreateWorkoutRecordDto, CreateResistanceDataDto, CreateCardioDataDto } from './dto/create-workout-record.dto';
+import { UpdateWorkoutRecordDto, UpdateResistanceDataDto, UpdateCardioDataDto } from './dto/update-workout-record.dto';
 import { UserExercise, UserExerciseDocument } from './schemas/user-exercise.schema';
 
 @Injectable()
@@ -19,27 +19,75 @@ export class WorkoutService {
   ) {}
 
   async create(userId: string, dto: CreateWorkoutRecordDto): Promise<WorkoutRecord> {
-    const { exercises, ...rest } = dto;
+    // 向後兼容：如果沒有 type 但有 exercises，視為舊版重訓記錄
+    let workoutType = dto.type;
+    if (!workoutType && dto.exercises && dto.exercises.length > 0) {
+      workoutType = WorkoutType.Resistance;
+    }
 
-    const computed = this.computeTotals(exercises);
-    // 若前端有送休息或時長，合併；否則自行依 sets 計算 totalRestSeconds（保守計）
-    const totalRestSeconds =
-      typeof dto.totalRestSeconds === 'number'
-        ? dto.totalRestSeconds
-        : this.computeTotalRestSeconds(exercises as any);
+    if (!workoutType) {
+      throw new BadRequestException('必須指定運動類型');
+    }
 
-    const record = new this.workoutRecordModel({
+    const recordData: any = {
       userId: new Types.ObjectId(userId),
       date: new Date(dto.date),
-      exercises,
-      ...rest,
-      ...computed,
-      totalRestSeconds,
-    });
+      type: workoutType,
+      duration: dto.duration,
+      notes: dto.notes,
+    };
+
+    // 根據運動類型處理專用數據
+    if (workoutType === WorkoutType.Resistance) {
+      const resistanceData = dto.resistanceData || {
+        exercises: dto.exercises || [], // 向後兼容
+        totalRestSeconds: dto.totalRestSeconds,
+      };
+
+      if (!resistanceData.exercises || resistanceData.exercises.length === 0) {
+        throw new BadRequestException('重訓記錄必須包含至少一個動作');
+      }
+
+      const computed = this.computeResistanceTotals(resistanceData.exercises);
+      const totalRestSeconds =
+        typeof resistanceData.totalRestSeconds === 'number'
+          ? resistanceData.totalRestSeconds
+          : this.computeTotalRestSeconds(resistanceData.exercises as any);
+
+      recordData.resistanceData = {
+        ...resistanceData,
+        ...computed,
+        totalRestSeconds,
+      };
+
+      // 向後兼容：保留舊欄位
+      if (dto.exercises) {
+        recordData.exercises = dto.exercises;
+        recordData.totalVolume = computed.totalVolume;
+        recordData.totalSets = computed.totalSets;
+        recordData.totalReps = computed.totalReps;
+        recordData.totalRestSeconds = totalRestSeconds;
+      }
+      if (dto.workoutDurationSeconds) {
+        recordData.workoutDurationSeconds = dto.workoutDurationSeconds;
+      }
+    } else if (workoutType === WorkoutType.Cardio) {
+      if (!dto.cardioData) {
+        throw new BadRequestException('有氧記錄必須包含有氧數據');
+      }
+      recordData.cardioData = dto.cardioData;
+    } else if (workoutType === WorkoutType.Flexibility) {
+      if (!dto.flexibilityData) {
+        throw new BadRequestException('柔韌性記錄必須包含柔韌性數據');
+      }
+      recordData.flexibilityData = dto.flexibilityData;
+    }
+
+    const record = new this.workoutRecordModel(recordData);
     return record.save();
   }
 
-  async findAll(userId: string, date?: string): Promise<WorkoutRecord[]> {
+  async findAll(userId: string, date?: string, type?: WorkoutType): Promise<WorkoutRecord[]> {
     const filter: any = { userId: new Types.ObjectId(userId) };
     if (date) {
       const startDate = new Date(date);
@@ -47,6 +95,9 @@ export class WorkoutService {
       const endDate = new Date(date);
       endDate.setHours(23, 59, 59, 999);
       filter.date = { $gte: startDate, $lte: endDate };
+    }
+    if (type) {
+      filter.type = type;
     }
     return this.workoutRecordModel.find(filter).sort({ date: -1 }).exec();
   }
@@ -59,25 +110,60 @@ export class WorkoutService {
       .findOne({ _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) })
       .exec();
     if (!record) {
-      throw new NotFoundException(`找不到 ID 為 ${id} 的健身紀錄`);
+      throw new NotFoundException(`找不到 ID 為 ${id} 的運動紀錄`);
     }
     return record;
   }
 
   async update(userId: string, id: string, dto: UpdateWorkoutRecordDto): Promise<WorkoutRecord> {
-    const { exercises, ...rest } = dto;
+    const existing = await this.findOne(userId, id);
+    const workoutType = dto.type || existing.type;
 
-    const updateData: any = { ...rest };
-    if (exercises) {
-      updateData.exercises = exercises;
-      const computed = this.computeTotals(exercises);
-      Object.assign(updateData, computed);
-      if (typeof rest.totalRestSeconds !== 'number') {
-        updateData.totalRestSeconds = this.computeTotalRestSeconds(exercises as any);
+    const updateData: any = {};
+    
+    // 基礎欄位更新
+    if (dto.date) updateData.date = new Date(dto.date);
+    if (dto.type) updateData.type = dto.type;
+    if (dto.duration !== undefined) updateData.duration = dto.duration;
+    if (dto.notes !== undefined) updateData.notes = dto.notes;
+
+    // 根據運動類型處理專用數據更新
+    if (workoutType === WorkoutType.Resistance) {
+      if (dto.resistanceData || dto.exercises) { // 向後兼容
+        const resistanceData = dto.resistanceData || {
+          exercises: dto.exercises || [],
+          totalRestSeconds: dto.totalRestSeconds,
+        };
+
+        const computed = this.computeResistanceTotals(resistanceData.exercises || []);
+        const totalRestSeconds =
+          typeof resistanceData.totalRestSeconds === 'number'
+            ? resistanceData.totalRestSeconds
+            : this.computeTotalRestSeconds(resistanceData.exercises as any || []);
+
+        updateData.resistanceData = {
+          ...existing.resistanceData,
+          ...resistanceData,
+          ...computed,
+          totalRestSeconds,
+        };
+
+        // 向後兼容：更新舊欄位
+        if (dto.exercises) {
+          updateData.exercises = dto.exercises;
+          updateData.totalVolume = computed.totalVolume;
+          updateData.totalSets = computed.totalSets;
+          updateData.totalReps = computed.totalReps;
+          updateData.totalRestSeconds = totalRestSeconds;
+        }
+        if (dto.workoutDurationSeconds !== undefined) {
+          updateData.workoutDurationSeconds = dto.workoutDurationSeconds;
+        }
       }
-    }
-    if (rest.date) {
-      updateData.date = new Date(rest.date);
+    } else if (workoutType === WorkoutType.Cardio && dto.cardioData) {
+      updateData.cardioData = { ...existing.cardioData, ...dto.cardioData };
+    } else if (workoutType === WorkoutType.Flexibility && dto.flexibilityData) {
+      updateData.flexibilityData = { ...existing.flexibilityData, ...dto.flexibilityData };
     }
 
     const updated = await this.workoutRecordModel
@@ -87,8 +173,9 @@ export class WorkoutService {
         { new: true },
       )
       .exec();
+      
     if (!updated) {
-      throw new NotFoundException(`找不到 ID 為 ${id} 的健身紀錄`);
+      throw new NotFoundException(`找不到 ID 為 ${id} 的運動紀錄`);
     }
     return updated;
   }
@@ -98,7 +185,7 @@ export class WorkoutService {
       .findOneAndDelete({ _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) })
       .exec();
     if (!result) {
-      throw new NotFoundException(`找不到 ID 為 ${id} 的健身紀錄`);
+      throw new NotFoundException(`找不到 ID 為 ${id} 的運動紀錄`);
     }
   }
 
@@ -117,19 +204,39 @@ export class WorkoutService {
       totalVolume: 0,
       totalSets: 0,
       totalReps: 0,
+      totalDuration: 0, // 新增：總運動時間（分鐘）
       recordCount: records.length,
+      recordsByType: {}, // 新增：按運動類型統計
     };
 
     records.forEach((r) => {
-      summary.totalVolume += r.totalVolume;
-      summary.totalSets += r.totalSets;
-      summary.totalReps += r.totalReps;
+      // 統計重訓數據（從新結構或舊欄位取值）
+      const volume = r.resistanceData?.totalVolume || r.totalVolume || 0;
+      const sets = r.resistanceData?.totalSets || r.totalSets || 0;
+      const reps = r.resistanceData?.totalReps || r.totalReps || 0;
+      
+      summary.totalVolume += volume;
+      summary.totalSets += sets;
+      summary.totalReps += reps;
+      
+      // 統計總運動時間
+      if (r.duration) {
+        summary.totalDuration += r.duration;
+      }
+      
+      // 按運動類型統計
+      const type = r.type || WorkoutType.Resistance;
+      if (!summary.recordsByType[type]) {
+        summary.recordsByType[type] = 0;
+      }
+      summary.recordsByType[type]++;
     });
 
     return { date, records, dailyTotals: summary };
   }
 
-  private computeTotals(
+  // 重命名以更明確表示用途
+  private computeResistanceTotals(
     exercises: Array<{ sets?: Array<{ weight?: number; reps?: number }> }>,
   ) {
     let totalVolume = 0;
@@ -146,6 +253,9 @@ export class WorkoutService {
     }
     return { totalVolume, totalSets, totalReps };
   }
+
+  // 向後兼容：保留舊方法名稱
+  private computeTotals = this.computeResistanceTotals;
 
   private computeTotalRestSeconds(
     exercises: Array<{ sets?: Array<{ restSeconds?: number }> }>,
