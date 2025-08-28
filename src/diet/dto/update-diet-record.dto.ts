@@ -4,7 +4,6 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
-  IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -14,15 +13,57 @@ import {
 } from 'class-validator';
 
 export class UpdateFoodItemDto {
-  @ApiProperty({ description: '食物 ID' })
-  @IsMongoId()
+  @ApiProperty({ description: '食物名稱', example: '白米飯' })
+  @IsString()
   @IsNotEmpty()
-  foodId: string;
+  foodName: string;
 
-  @ApiProperty({ description: '份量倍數', example: 1.5 })
+  @ApiProperty({ description: '食物描述', example: '一碗白米飯', required: false })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({ description: '卡路里', example: 150, required: false })
+  @IsOptional()
   @IsNumber()
-  @Min(0.1)
-  quantity: number;
+  @Min(0)
+  calories?: number;
+
+  @ApiProperty({ description: '蛋白質(g)', example: 3.5, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  protein?: number;
+
+  @ApiProperty({ description: '碳水化合物(g)', example: 30, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  carbohydrates?: number;
+
+  @ApiProperty({ description: '脂肪(g)', example: 0.5, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fat?: number;
+
+  @ApiProperty({ description: '纖維(g)', example: 1.0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fiber?: number;
+
+  @ApiProperty({ description: '糖分(g)', example: 0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sugar?: number;
+
+  @ApiProperty({ description: '鈉含量(mg)', example: 5, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sodium?: number;
 }
 
 export class UpdateDietRecordDto {

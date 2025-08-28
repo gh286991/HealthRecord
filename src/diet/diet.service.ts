@@ -4,14 +4,12 @@ import { Model, Types } from 'mongoose';
 import { DietRecord, DietRecordDocument } from './schemas/diet-record.schema';
 import { CreateDietRecordDto } from './dto/create-diet-record.dto';
 import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
-import { FoodService } from '../food/food.service';
 
 @Injectable()
 export class DietService {
   constructor(
     @InjectModel(DietRecord.name)
     private dietRecordModel: Model<DietRecordDocument>,
-    private foodService: FoodService,
   ) {}
 
   async create(
@@ -33,7 +31,7 @@ export class DietService {
     };
 
     if (foods && foods.length > 0) {
-      processedFoods = await this.processFoodItems(foods);
+      processedFoods = this.processFoodItems(foods);
       totals = this.calculateTotals(processedFoods);
     }
 
@@ -99,7 +97,7 @@ export class DietService {
 
     if (foods) {
       if (foods.length > 0) {
-        processedFoods = await this.processFoodItems(foods);
+        processedFoods = this.processFoodItems(foods);
         totals = this.calculateTotals(processedFoods);
       } else {
         // 如果 foods 是空陣列，設定為空並重置營養成分
@@ -205,27 +203,43 @@ export class DietService {
     };
   }
 
-  private async processFoodItems(foods: any[]): Promise<any[]> {
-    const processedFoods = [];
+  async getMarkedDates(userId: string, year: number, month: number): Promise<string[]> {
+    const startDate = new Date(year, month - 1, 1);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const endDate = new Date(year, month, 0);
+    endDate.setHours(23, 59, 59, 999);
 
-    for (const foodItem of foods) {
-      const food = await this.foodService.findOne(foodItem.foodId);
+    const records = await this.dietRecordModel
+      .find({
+        userId: new Types.ObjectId(userId),
+        date: { $gte: startDate, $lte: endDate },
+      })
+      .select('date')
+      .exec();
 
-      processedFoods.push({
-        foodId: new Types.ObjectId(foodItem.foodId),
-        foodName: food.name,
-        quantity: foodItem.quantity,
-        calories: food.calories * foodItem.quantity,
-        protein: food.protein * foodItem.quantity,
-        carbohydrates: food.carbohydrates * foodItem.quantity,
-        fat: food.fat * foodItem.quantity,
-        fiber: food.fiber ? food.fiber * foodItem.quantity : undefined,
-        sugar: food.sugar ? food.sugar * foodItem.quantity : undefined,
-        sodium: food.sodium ? food.sodium * foodItem.quantity : undefined,
-      });
-    }
+    // 提取唯一的日期（只取年-月-日）
+    const uniqueDates = new Set<string>();
+    records.forEach(record => {
+      const dateStr = record.date.toISOString().split('T')[0];
+      uniqueDates.add(dateStr);
+    });
 
-    return processedFoods;
+    return Array.from(uniqueDates).sort();
+  }
+
+  private processFoodItems(foods: any[]): any[] {
+    return foods.map(foodItem => ({
+      foodName: foodItem.foodName,
+      description: foodItem.description || '',
+      calories: foodItem.calories || 0,
+      protein: foodItem.protein || 0,
+      carbohydrates: foodItem.carbohydrates || 0,
+      fat: foodItem.fat || 0,
+      fiber: foodItem.fiber || 0,
+      sugar: foodItem.sugar || 0,
+      sodium: foodItem.sodium || 0,
+    }));
   }
 
   private calculateTotals(foods: any[]): any {

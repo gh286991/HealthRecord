@@ -54,6 +54,16 @@ export class DietController {
     return this.dietService.getDailySummary(req.user.userId, date);
   }
 
+  @Get('marked-dates/:year/:month')
+  @ApiOperation({ summary: '取得有飲食記錄的日期' })
+  getMarkedDates(
+    @Request() req,
+    @Param('year') year: string,
+    @Param('month') month: string,
+  ) {
+    return this.dietService.getMarkedDates(req.user.userId, parseInt(year), parseInt(month));
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '根據 ID 取得飲食紀錄' })
   findOne(@Request() req, @Param('id') id: string) {

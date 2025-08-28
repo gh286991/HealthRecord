@@ -5,35 +5,32 @@ export type DietRecordDocument = DietRecord & Document;
 
 @Schema({ _id: false })
 export class FoodItem {
-  @Prop({ type: Types.ObjectId, ref: 'Food', required: true })
-  foodId: Types.ObjectId;
-
   @Prop({ required: true })
-  foodName: string;
+  foodName: string; // 使用者自行輸入的食物名稱
 
-  @Prop({ required: true, min: 0.1 })
-  quantity: number; // 份量倍數，如 1.5 表示 1.5 份
+  @Prop({ required: false })
+  description?: string; // 食物描述（如：一碗白飯、一個蘋果）
 
-  @Prop({ required: true })
-  calories: number;
+  @Prop({ required: false, default: 0 })
+  calories: number; // 估計卡路里
 
-  @Prop({ required: true })
-  protein: number;
+  @Prop({ required: false, default: 0 })
+  protein: number; // 估計蛋白質(g)
 
-  @Prop({ required: true })
-  carbohydrates: number;
+  @Prop({ required: false, default: 0 })
+  carbohydrates: number; // 估計碳水化合物(g)
 
-  @Prop({ required: true })
-  fat: number;
+  @Prop({ required: false, default: 0 })
+  fat: number; // 估計脂肪(g)
 
-  @Prop()
-  fiber?: number;
+  @Prop({ required: false, default: 0 })
+  fiber?: number; // 估計纖維(g)
 
-  @Prop()
-  sugar?: number;
+  @Prop({ required: false, default: 0 })
+  sugar?: number; // 估計糖分(g)
 
-  @Prop()
-  sodium?: number;
+  @Prop({ required: false, default: 0 })
+  sodium?: number; // 估計鈉含量(mg)
 }
 
 @Schema({ timestamps: true })
@@ -80,5 +77,5 @@ export class DietRecord {
 
 export const DietRecordSchema = SchemaFactory.createForClass(DietRecord);
 
-// 建立複合索引，確保同一用戶在同一天同一餐次只有一筆紀錄
-DietRecordSchema.index({ userId: 1, date: 1, mealType: 1 }, { unique: true });
+// 建立複合索引，提高查詢效率（移除unique限制，允許同一餐次多筆記錄）
+DietRecordSchema.index({ userId: 1, date: 1, mealType: 1 });
