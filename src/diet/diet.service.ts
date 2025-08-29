@@ -264,4 +264,68 @@ export class DietService {
       },
     );
   }
+
+  // 遷移營養字段的方法
+  async migrateNutritionFields(): Promise<{ updated: number; total: number }> {
+    const allRecords = await this.dietRecordModel.find({}).exec();
+    let updatedCount = 0;
+
+    for (const record of allRecords) {
+      let needsUpdate = false;
+      const updateDoc: any = {};
+
+      // 檢查並更新 foods 陣列中的營養素字段
+      if (record.foods && record.foods.length > 0) {
+        const updatedFoods = record.foods.map(food => ({
+          ...food,
+          protein: food.protein ?? 0,
+          carbohydrates: food.carbohydrates ?? 0,
+          fat: food.fat ?? 0,
+          fiber: food.fiber ?? 0,
+          sugar: food.sugar ?? 0,
+          sodium: food.sodium ?? 0,
+          calories: food.calories ?? 0,
+        }));
+
+        updateDoc.foods = updatedFoods;
+        needsUpdate = true;
+      }
+
+      // 檢查並更新總營養素字段
+      if (record.totalProtein === undefined || record.totalProtein === null) {
+        updateDoc.totalProtein = 0;
+        needsUpdate = true;
+      }
+      if (record.totalCarbohydrates === undefined || record.totalCarbohydrates === null) {
+        updateDoc.totalCarbohydrates = 0;
+        needsUpdate = true;
+      }
+      if (record.totalFat === undefined || record.totalFat === null) {
+        updateDoc.totalFat = 0;
+        needsUpdate = true;
+      }
+      if (record.totalFiber === undefined || record.totalFiber === null) {
+        updateDoc.totalFiber = 0;
+        needsUpdate = true;
+      }
+      if (record.totalSugar === undefined || record.totalSugar === null) {
+        updateDoc.totalSugar = 0;
+        needsUpdate = true;
+      }
+      if (record.totalSodium === undefined || record.totalSodium === null) {
+        updateDoc.totalSodium = 0;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await this.dietRecordModel.updateOne(
+          { _id: record._id },
+          { $set: updateDoc }
+        );
+        updatedCount++;
+      }
+    }
+
+    return { updated: updatedCount, total: allRecords.length };
+  }
 }

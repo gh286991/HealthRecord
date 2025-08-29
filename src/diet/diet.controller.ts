@@ -64,6 +64,16 @@ export class DietController {
     return this.dietService.getMarkedDates(req.user.userId, parseInt(year), parseInt(month));
   }
 
+  @Post('migrate-nutrition-fields')
+  @ApiOperation({ summary: '遷移營養字段（僅限開發環境）' })
+  migrateNutritionFields() {
+    // 僅在開發環境允許執行
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('此操作僅限開發環境');
+    }
+    return this.dietService.migrateNutritionFields();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '根據 ID 取得飲食紀錄' })
   findOne(@Request() req, @Param('id') id: string) {
