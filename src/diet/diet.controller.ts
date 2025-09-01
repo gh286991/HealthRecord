@@ -25,6 +25,7 @@ import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MinioService } from '../common/services/minio.service';
+import sharp from 'sharp';
 
 @ApiTags('飲食紀錄')
 @Controller('diet-records')
@@ -137,14 +138,30 @@ export class DietController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const fileName = this.minioService.generateUniqueFileName(
-      file.originalname,
+    // 先嘗試轉為 WebP，失敗則回退原圖
+    let bufferToUpload = file.buffer;
+    let contentType = 'image/webp';
+    let targetFileName = this.minioService.generateUniqueFileName(
+      file.originalname.replace(/\.[^.]+$/, '.webp'),
     );
+    try {
+      bufferToUpload = await sharp(file.buffer)
+        .rotate() // 修正 EXIF 方向
+        .webp({ quality: 80 })
+        .toBuffer();
+    } catch (e) {
+      // 回退：使用原始檔
+      bufferToUpload = file.buffer;
+      contentType = file.mimetype;
+      targetFileName = this.minioService.generateUniqueFileName(
+        file.originalname,
+      );
+    }
 
     const photoUrl = await this.minioService.uploadFile(
-      fileName,
-      file.buffer,
-      file.mimetype,
+      targetFileName,
+      bufferToUpload,
+      contentType,
       'diet-records',
     );
 
