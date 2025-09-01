@@ -25,7 +25,13 @@ import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MinioService } from '../common/services/minio.service';
-import sharp from 'sharp';
+import { Logger } from '@nestjs/common';
+// 動態載入 sharp，避免在不同模組系統下的相容性問題
+let sharpLib: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  sharpLib = require('sharp');
+} catch {}
 
 @ApiTags('飲食紀錄')
 @Controller('diet-records')
@@ -36,6 +42,7 @@ export class DietController {
     private readonly dietService: DietService,
     private readonly minioService: MinioService,
   ) {}
+  private readonly logger = new Logger(DietController.name);
 
   @Post()
   @ApiOperation({ summary: '建立飲食紀錄' })
@@ -141,20 +148,30 @@ export class DietController {
     // 先嘗試轉為 WebP，失敗則回退原圖
     let bufferToUpload = file.buffer;
     let contentType = 'image/webp';
-    let targetFileName = this.minioService.generateUniqueFileName(
-      file.originalname.replace(/\.[^.]+$/, '.webp'),
-    );
+    // 成功轉檔時強制使用 .webp 檔名
+    let targetFileName = `${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 8)}.webp`;
     try {
-      bufferToUpload = await sharp(file.buffer)
-        .rotate() // 修正 EXIF 方向
-        .webp({ quality: 80 })
-        .toBuffer();
+      if (sharpLib) {
+        const converted = await sharpLib(file.buffer)
+          .rotate() // 修正 EXIF 方向
+          .webp({ quality: 80 })
+          .toBuffer();
+        bufferToUpload = converted;
+        this.logger.log(
+          `Convert to webp success: orig=${file.mimetype}(${file.size}) => webp(${bufferToUpload.length}), name=${targetFileName}`,
+        );
+      } else {
+        throw new Error('sharp not available');
+      }
     } catch (e) {
       // 回退：使用原始檔
       bufferToUpload = file.buffer;
       contentType = file.mimetype;
-      targetFileName = this.minioService.generateUniqueFileName(
-        file.originalname,
+      targetFileName = this.minioService.generateUniqueFileName(file.originalname);
+      this.logger.warn(
+        `Convert to webp failed, fallback original: reason=${(e as Error).message}, name=${targetFileName}, type=${contentType}`,
       );
     }
 
