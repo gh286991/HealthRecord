@@ -5,6 +5,8 @@ import { WorkoutRecord, WorkoutRecordDocument, BodyPart, WorkoutType, Resistance
 import { Exercise, ExerciseDocument } from './schemas/exercise.schema';
 import { CreateWorkoutRecordDto, CreateResistanceDataDto, CreateCardioDataDto } from './dto/create-workout-record.dto';
 import { UpdateWorkoutRecordDto, UpdateResistanceDataDto, UpdateCardioDataDto } from './dto/update-workout-record.dto';
+import { CreateWorkoutPlanDto } from './dto/create-workout-plan.dto';
+import { WorkoutPlan, WorkoutPlanDocument } from './schemas/workout-plan.schema';
 import { UserExercise, UserExerciseDocument } from './schemas/user-exercise.schema';
 
 @Injectable()
@@ -16,6 +18,8 @@ export class WorkoutService {
     private exerciseModel: Model<ExerciseDocument>,
     @InjectModel(UserExercise.name)
     private userExerciseModel: Model<UserExerciseDocument>,
+    @InjectModel(WorkoutPlan.name)
+    private workoutPlanModel: Model<WorkoutPlanDocument>,
   ) {}
 
   async create(userId: string, dto: CreateWorkoutRecordDto): Promise<WorkoutRecord> {
@@ -436,6 +440,208 @@ export class WorkoutService {
     });
     
     return { message: 'Exercise seeds reset successfully', count: defaults.length };
+  }
+
+  // --- Workout Plan Methods ---
+
+  async createWorkoutPlan(
+    dto: CreateWorkoutPlanDto,
+    creatorId: string,
+  ): Promise<WorkoutPlan> {
+    const planData = {
+      ...dto,
+      creator: new Types.ObjectId(creatorId),
+      assignedTo: dto.assignedTo
+        ? new Types.ObjectId(dto.assignedTo)
+        : new Types.ObjectId(creatorId),
+      plannedDate: new Date(dto.plannedDate),
+    };
+
+    const createdPlan = new this.workoutPlanModel(planData);
+    return createdPlan.save();
+  }
+
+  async createWorkoutPlansBulk(
+    payload: {
+      name: string;
+      exercises: any[];
+      startDate: string;
+      endDate: string;
+      recurrence: 'daily' | 'weekly';
+      weekdays?: number[];
+    },
+    userId: string,
+  ): Promise<{ created: number }>{
+    const start = new Date(payload.startDate);
+    const end = new Date(payload.endDate);
+    end.setHours(0,0,0,0);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+      throw new BadRequestException('無效的開始或結束日期');
+    }
+    const dates: Date[] = [];
+    const weekdays = new Set<number>((payload.weekdays || []).map((d) => Number(d)));
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      if (payload.recurrence === 'daily') {
+        dates.push(new Date(cursor));
+      } else if (payload.recurrence === 'weekly') {
+        if (weekdays.has(cursor.getDay())) {
+          dates.push(new Date(cursor));
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    if (dates.length === 0) return { created: 0 };
+
+    const docs = dates.map((d) => ({
+      name: `${payload.name} ${d.toISOString().split('T')[0]}`,
+      plannedDate: d,
+      exercises: payload.exercises,
+      creator: new Types.ObjectId(userId),
+      assignedTo: new Types.ObjectId(userId),
+      status: 'pending',
+    }));
+
+    await this.workoutPlanModel.insertMany(docs, { ordered: false });
+    return { created: docs.length };
+  }
+
+  async getWorkoutPlans(
+    userId: string,
+    date?: string,
+  ): Promise<WorkoutPlan[]> {
+    const filter: any = { assignedTo: new Types.ObjectId(userId) };
+    if (date) {
+      const startDate = new Date(date);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(date);
+      endDate.setHours(23, 59, 59, 999);
+      filter.plannedDate = { $gte: startDate, $lte: endDate };
+    }
+    return this.workoutPlanModel.find(filter).sort({ plannedDate: -1 }).exec();
+  }
+
+  async getPlannedDates(
+    userId: string,
+    year: number,
+    month: number,
+    status: 'pending' | 'completed' | undefined = 'pending',
+  ): Promise<string[]> {
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      throw new BadRequestException('無效的年份或月份');
+    }
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const filter: any = {
+      assignedTo: new Types.ObjectId(userId),
+      plannedDate: { $gte: startDate, $lte: endDate },
+    };
+    if (status) {
+      filter.status = status;
+    }
+
+    const plans = await this.workoutPlanModel
+      .find(filter)
+      .select('plannedDate')
+      .lean();
+
+    const dates = new Set<string>();
+    plans.forEach((p: any) => {
+      dates.add(new Date(p.plannedDate).toISOString().split('T')[0]);
+    });
+
+    return Array.from(dates);
+  }
+
+  async findWorkoutPlanById(
+    id: string,
+    userId: string,
+  ): Promise<WorkoutPlan> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException(`無效的課表 ID 格式: ${id}`);
+    }
+    const plan = await this.workoutPlanModel
+      .findOne({
+        _id: new Types.ObjectId(id),
+        // User can view a plan if they created it or are assigned to it
+        $or: [
+          { creator: new Types.ObjectId(userId) },
+          { assignedTo: new Types.ObjectId(userId) },
+        ],
+      })
+      .exec();
+
+    if (!plan) {
+      throw new NotFoundException(`找不到 ID 為 ${id} 的課表`);
+    }
+    return plan;
+  }
+
+  async updateWorkoutPlan(
+    id: string,
+    dto: Partial<CreateWorkoutPlanDto>,
+    userId: string,
+  ): Promise<WorkoutPlan> {
+    // Ensure user has permission to update
+    const existingPlan = await this.findWorkoutPlanById(id, userId);
+
+    // User can update if they are the creator or the assignee
+    const isCreator = existingPlan.creator.equals(new Types.ObjectId(userId));
+    const isAssignee = existingPlan.assignedTo.equals(new Types.ObjectId(userId));
+
+    if (!isCreator || !isAssignee) {
+      throw new BadRequestException('只有建立者或被指派者才能修改課表');
+    }
+
+    const updatedPlan = await this.workoutPlanModel
+      .findByIdAndUpdate(id, dto, { new: true })
+      .exec();
+
+    if (!updatedPlan) {
+      throw new NotFoundException(`找不到 ID 為 ${id} 的課表`);
+    }
+    return updatedPlan;
+  }
+
+  async deleteWorkoutPlan(id: string, userId: string): Promise<void> {
+    // Ensure user has permission to delete
+    const existingPlan = await this.findWorkoutPlanById(id, userId);
+
+    // User can delete if they are the creator or the assignee
+    const isCreator = existingPlan.creator.equals(new Types.ObjectId(userId));
+    const isAssignee = existingPlan.assignedTo.equals(new Types.ObjectId(userId));
+
+    if (!isCreator && !isAssignee) {
+      throw new BadRequestException('只有建立者或被指派者才能刪除課表');
+    }
+
+    const result = await this.workoutPlanModel.findByIdAndDelete(id).exec();
+    if (!result) {
+      throw new NotFoundException(`找不到 ID 為 ${id} 的課表`);
+    }
+  }
+  
+  async completeWorkoutPlan(id: string, userId: string): Promise<WorkoutPlan> {
+    const plan = await this.findWorkoutPlanById(id, userId);
+
+    // Ensure the person completing the plan is the one it was assigned to
+    if (plan.assignedTo.toString() !== userId) {
+      throw new BadRequestException('您無法完成不屬於您的課表');
+    }
+
+    const updatedPlan = await this.workoutPlanModel.findByIdAndUpdate(
+      id,
+      { status: 'completed' },
+      { new: true },
+    ).exec();
+
+    if (!updatedPlan) {
+      throw new NotFoundException(`更新課表狀態失敗，找不到 ID 為 ${id} 的課表`);
+    }
+
+    return updatedPlan;
   }
 }
 
