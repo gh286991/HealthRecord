@@ -40,6 +40,14 @@ export class User {
   // 使用者生日
   @Prop({ required: false, trim: true, type: Date })
   birthday: string;
+
+  // AI 分析計數
+  @Prop({ type: Number, default: 0 })
+  aiAnalysisCount: number;
+
+  // 最後 AI 分析日期
+  @Prop({ type: Date, default: null })
+  lastAiAnalysisDate: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

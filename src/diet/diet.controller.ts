@@ -79,8 +79,11 @@ export class DietController {
     },
   })
   @ApiOperation({ summary: '上傳照片以分析食物營養' })
-  async analyzePhoto(@UploadedFile() file: Express.Multer.File) {
-    return this.dietService.analyzePhoto(file);
+  async analyzePhoto(
+    @Request() req,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.dietService.analyzePhoto(file, req.user.userId);
   }
 
   @Post()

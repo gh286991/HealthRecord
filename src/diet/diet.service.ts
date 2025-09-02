@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -11,21 +12,43 @@ import { CreateDietRecordDto } from './dto/create-diet-record.dto';
 import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { User, UserDocument } from '../auth/schemas/user.schema';
 
 @Injectable()
 export class DietService {
   private readonly logger = new Logger(DietService.name);
+  private readonly AI_ANALYSIS_LIMIT = 12;
 
   constructor(
     @InjectModel(DietRecord.name)
     private dietRecordModel: Model<DietRecordDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly configService: ConfigService,
   ) {}
 
   async analyzePhoto(
     file: Express.Multer.File,
+    userId: string,
   ): Promise<{ foods: any[] } | { error: string }> {
-    this.logger.log('Starting diet photo analysis with Gemini...');
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('找不到使用者');
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (user.lastAiAnalysisDate && user.lastAiAnalysisDate.getTime() < today.getTime()) {
+      user.aiAnalysisCount = 0;
+    }
+
+    if (user.aiAnalysisCount >= this.AI_ANALYSIS_LIMIT) {
+      throw new ForbiddenException('已超過今日 AI 分析次數限制 (12次)');
+    }
+
+    this.logger.log(
+      `Starting diet photo analysis for user ${userId} with Gemini...`,
+    );
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       this.logger.error('GEMINI_API_KEY is not configured.');
@@ -73,7 +96,7 @@ export class DietService {
           {
             "foodName": "食物名稱",
             "description": "簡短描述",
-            "servingSize": 數值 (份量),
+            "servingSize": "份量（必須為字串，例如 \"100g\"、\"1個蘋果\"）",
             "calories": 數值 (大卡),
             "protein": 數值 (克),
             "carbohydrates": 數值 (克),
@@ -81,10 +104,12 @@ export class DietService {
             "fiber": 數值 (克),
             "sugar": 數值 (克),
             "sodium": 數值 (毫克),
-            "category": "食物分類，如 "蔬菜", "水果", "肉類", "穀物"
+            "category": "食物分類（例如 \"蔬菜\"、\"水果\"、\"肉類\"、\"穀物\"）"
           }
         ]
       }
+
+      僅回傳有效 JSON，不要加入任何註解、額外說明或 Markdown。
     `;
 
     try {
@@ -99,20 +124,24 @@ export class DietService {
       const response = result.response;
       let text = response.text();
 
-      // 清理 Gemini 可能回傳的 markdown 格式
+      // 嘗試將 Gemini 回傳修復為可解析的 JSON
       text = text.replace(/^```json\s*|```$/g, '').trim();
-
       this.logger.log(`Gemini raw response: ${text}`);
 
-      const parsedResult = JSON.parse(text);
+      const parsedResult = this.safelyParseGeminiJson(text);
       
       if (!parsedResult.foods) {
         this.logger.warn('Gemini response is missing "foods" array');
         return { foods: [] };
       }
 
+      // 更新使用者計數
+      user.aiAnalysisCount += 1;
+      user.lastAiAnalysisDate = new Date();
+      await user.save();
+
       this.logger.log(
-        `Successfully analyzed photo, found ${parsedResult.foods.length} food items.`,
+        `Successfully analyzed photo, found ${parsedResult.foods.length} food items. User count: ${user.aiAnalysisCount}`,
       );
       return parsedResult;
     } catch (error) {
@@ -341,13 +370,13 @@ export class DietService {
     return foods.map(foodItem => ({
       foodName: foodItem.foodName,
       description: foodItem.description || '',
-      calories: foodItem.calories || 0,
-      protein: foodItem.protein || 0,
-      carbohydrates: foodItem.carbohydrates || 0,
-      fat: foodItem.fat || 0,
-      fiber: foodItem.fiber || 0,
-      sugar: foodItem.sugar || 0,
-      sodium: foodItem.sodium || 0,
+      calories: this.toNumber(foodItem.calories),
+      protein: this.toNumber(foodItem.protein),
+      carbohydrates: this.toNumber(foodItem.carbohydrates),
+      fat: this.toNumber(foodItem.fat),
+      fiber: this.toNumber(foodItem.fiber),
+      sugar: this.toNumber(foodItem.sugar),
+      sodium: this.toNumber(foodItem.sodium),
     }));
   }
 
@@ -372,6 +401,62 @@ export class DietService {
         totalSodium: 0,
       },
     );
+  }
+
+  /**
+   * 嘗試修復 Gemini 產出的近似 JSON 文字，處理常見問題並解析為物件。
+   * - 自動抽取最外層的 { ... } 片段
+   * - 移除尾逗號
+   * - 將帶單位的數值（例如 20g、300mg、120kcal）自動加上雙引號，避免 JSON 解析錯誤
+   * - 將單引號字串嘗試換成雙引號（僅在合理範圍內）
+   */
+  private safelyParseGeminiJson(text: string): any {
+    // 1) 嘗試直接解析
+    try {
+      return JSON.parse(text);
+    } catch {}
+
+    // 2) 抽取最外層 JSON 區段
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      text = text.slice(firstBrace, lastBrace + 1);
+    }
+
+    // 3) 先移除常見的尾逗號
+    text = text.replace(/,\s*([}\]])/g, '$1');
+
+    // 4) 嘗試僅修復 servingSize 欄位：若值含字母或中文字但未加引號，則補上雙引號
+    text = text.replace(/("servingSize"\s*:\s*)([^,}\]\s][^,}\]]*)/g, (match, p1, p2) => {
+      const raw = String(p2).trim();
+      if (/^".*"$/.test(raw) || /^\'.*\'$/.test(raw)) return `${p1}${raw}`;
+      // 若包含英文字母或中文字元，視為需要字串化
+      if (/[A-Za-z\u4e00-\u9fa5]/.test(raw)) {
+        const quoted = raw.replace(/"/g, '\\"');
+        return `${p1}"${quoted}"`;
+      }
+      return match;
+    });
+
+    // 5) 把明顯的單引號字串改成雙引號（避免破壞數字/小數）
+    // 僅針對 JSON 中的屬性值的簡單情境： : '...'
+    text = text.replace(/:\s*'([^']*)'/g, (m, p1) => `: "${p1.replace(/"/g, '\\"')}"`);
+
+    // 6) 再試一次解析
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      this.logger.warn(`Repairing Gemini JSON failed, fallback empty. Reason: ${(e as Error).message}`);
+      return { foods: [] };
+    }
+  }
+
+  private toNumber(value: any): number {
+    if (typeof value === 'number') return isFinite(value) ? value : 0;
+    if (value === null || value === undefined) return 0;
+    const cleaned = String(value).replace(/[^0-9+\-\.eE]/g, '');
+    const num = parseFloat(cleaned);
+    return isFinite(num) ? num : 0;
   }
 
   // 遷移營養字段的方法
