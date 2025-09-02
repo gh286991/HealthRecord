@@ -1,16 +1,125 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { DietRecord, DietRecordDocument } from './schemas/diet-record.schema';
 import { CreateDietRecordDto } from './dto/create-diet-record.dto';
 import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
+import { ConfigService } from '@nestjs/config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 @Injectable()
 export class DietService {
+  private readonly logger = new Logger(DietService.name);
+
   constructor(
     @InjectModel(DietRecord.name)
     private dietRecordModel: Model<DietRecordDocument>,
+    private readonly configService: ConfigService,
   ) {}
+
+  async analyzePhoto(
+    file: Express.Multer.File,
+  ): Promise<{ foods: any[] } | { error: string }> {
+    this.logger.log('Starting diet photo analysis with Gemini...');
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (!apiKey) {
+      this.logger.error('GEMINI_API_KEY is not configured.');
+      throw new BadRequestException('AI 功能未設定，請聯絡管理員。');
+    }
+
+    if (!file) {
+      throw new BadRequestException('沒有提供圖片檔案。');
+    }
+
+    let imageBuffer = file.buffer;
+    let mimeType = file.mimetype;
+
+    // 在傳送前，先用 sharp 壓縮圖片
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const sharp = require('sharp');
+      const compressedBuffer = await sharp(file.buffer)
+        .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85, progressive: true })
+        .toBuffer();
+      
+      this.logger.log(`Image compressed for Gemini: orig size=${file.size}, new size=${compressedBuffer.length}`);
+      imageBuffer = compressedBuffer;
+      mimeType = 'image/jpeg';
+
+    } catch (e) {
+      this.logger.warn(`Could not compress image for Gemini, using original. Reason: ${(e as Error).message}`);
+      // 如果壓縮失敗，則使用原圖
+      imageBuffer = file.buffer;
+      mimeType = file.mimetype;
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const prompt = `
+      請分析這張圖片中的食物。辨識出所有食物項目，並為每一個項目提供營養估計值。
+      請嚴格按照下面的 JSON 格式回傳結果，不要有任何額外的文字或解釋。
+      如果圖片中沒有食物，或無法辨識，請回傳一個空的 "foods" 陣列。
+
+      JSON 格式:
+      {
+        "foods": [
+          {
+            "foodName": "食物名稱",
+            "description": "簡短描述",
+            "servingSize": 數值 (份量),
+            "calories": 數值 (大卡),
+            "protein": 數值 (克),
+            "carbohydrates": 數值 (克),
+            "fat": 數值 (克),
+            "fiber": 數值 (克),
+            "sugar": 數值 (克),
+            "sodium": 數值 (毫克),
+            "category": "食物分類，如 "蔬菜", "水果", "肉類", "穀物"
+          }
+        ]
+      }
+    `;
+
+    try {
+      const imagePart = {
+        inlineData: {
+          data: imageBuffer.toString('base64'),
+          mimeType: mimeType,
+        },
+      };
+
+      const result = await model.generateContent([prompt, imagePart]);
+      const response = result.response;
+      let text = response.text();
+
+      // 清理 Gemini 可能回傳的 markdown 格式
+      text = text.replace(/^```json\s*|```$/g, '').trim();
+
+      this.logger.log(`Gemini raw response: ${text}`);
+
+      const parsedResult = JSON.parse(text);
+      
+      if (!parsedResult.foods) {
+        this.logger.warn('Gemini response is missing "foods" array');
+        return { foods: [] };
+      }
+
+      this.logger.log(
+        `Successfully analyzed photo, found ${parsedResult.foods.length} food items.`,
+      );
+      return parsedResult;
+    } catch (error) {
+      this.logger.error(`Error analyzing photo with Gemini: ${error.message}`, error.stack);
+      throw new BadRequestException(`圖片分析失敗: ${error.message}`);
+    }
+  }
 
   async create(
     userId: string,

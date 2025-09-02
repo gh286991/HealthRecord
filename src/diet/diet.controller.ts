@@ -44,6 +44,45 @@ export class DietController {
   ) {}
   private readonly logger = new Logger(DietController.name);
 
+  @Post('analyze-photo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      fileFilter: (req, file, cb) => {
+        const allowedMimes = [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/gif',
+          'image/webp',
+        ];
+        if (!allowedMimes.includes(file.mimetype)) {
+          return cb(
+            new Error('只允許上傳 JPG、JPEG、PNG、GIF、WebP 格式的圖片檔案'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiOperation({ summary: '上傳照片以分析食物營養' })
+  async analyzePhoto(@UploadedFile() file: Express.Multer.File) {
+    return this.dietService.analyzePhoto(file);
+  }
+
   @Post()
   @ApiOperation({ summary: '建立飲食紀錄' })
   create(@Request() req, @Body() createDietRecordDto: CreateDietRecordDto) {
