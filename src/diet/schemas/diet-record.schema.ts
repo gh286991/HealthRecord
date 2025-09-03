@@ -73,6 +73,9 @@ export class DietRecord {
 
   @Prop({ default: '' })
   photoUrl: string; // 餐點照片網址
+
+  @Prop({ default: false })
+  isDraft: boolean; // 是否為草稿狀態
 }
 
 export const DietRecordSchema = SchemaFactory.createForClass(DietRecord);

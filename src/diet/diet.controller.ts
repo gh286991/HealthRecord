@@ -55,6 +55,12 @@ export class DietController {
     return this.dietService.create(req.user.userId, createDietRecordDto);
   }
 
+  @Post('draft')
+  @ApiOperation({ summary: '建立草稿飲食紀錄（用於圖片上傳）' })
+  createDraft(@Request() req, @Body() createDietRecordDto: CreateDietRecordDto) {
+    return this.dietService.createDraft(req.user.userId, createDietRecordDto);
+  }
+
   @Get()
   @ApiOperation({ summary: '取得用戶的飲食紀錄' })
   findAll(@Request() req, @Query('date') date?: string) {

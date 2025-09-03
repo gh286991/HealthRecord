@@ -199,8 +199,36 @@ export class DietService {
     return dietRecord.save();
   }
 
+  // 創建草稿記錄，用於圖片上傳
+  async createDraft(
+    userId: string,
+    createDietRecordDto: CreateDietRecordDto,
+  ): Promise<DietRecord> {
+    const draftRecord = new this.dietRecordModel({
+      userId: new Types.ObjectId(userId),
+      date: new Date(createDietRecordDto.date),
+      mealType: createDietRecordDto.mealType,
+      foods: [],
+      notes: createDietRecordDto.notes || '',
+      photoUrl: createDietRecordDto.photoUrl || '',
+      isDraft: true, // 標記為草稿
+      totalCalories: 0,
+      totalProtein: 0,
+      totalCarbohydrates: 0,
+      totalFat: 0,
+      totalFiber: 0,
+      totalSugar: 0,
+      totalSodium: 0,
+    });
+
+    return draftRecord.save();
+  }
+
   async findAll(userId: string, date?: string): Promise<DietRecord[]> {
-    const filter: any = { userId: new Types.ObjectId(userId) };
+    const filter: any = { 
+      userId: new Types.ObjectId(userId),
+      isDraft: { $ne: true } // 預設不返回草稿記錄
+    };
 
     if (date) {
       const startDate = new Date(date);
@@ -324,6 +352,7 @@ export class DietService {
       .find({
         userId: new Types.ObjectId(userId),
         date: { $gte: startDate, $lte: endDate },
+        isDraft: { $ne: true }, // 排除草稿記錄
       })
       .sort({ mealType: 1 })
       .exec();
@@ -371,6 +400,7 @@ export class DietService {
       .find({
         userId: new Types.ObjectId(userId),
         date: { $gte: startDate, $lte: endDate },
+        isDraft: { $ne: true }, // 排除草稿記錄
       })
       .select('date')
       .exec();

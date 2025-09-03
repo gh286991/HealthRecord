@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsMongoId,
@@ -99,4 +100,9 @@ export class CreateDietRecordDto {
   @IsOptional()
   @IsString()
   photoUrl?: string;
+
+  @ApiProperty({ description: '是否為草稿狀態', required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  isDraft?: boolean;
 }
