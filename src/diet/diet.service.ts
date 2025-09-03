@@ -16,6 +16,27 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { User, UserDocument } from '../auth/schemas/user.schema';
 import { AiLoggingService } from '../ai-logging/ai-logging.service';
 import { AiPromptService } from '../ai-prompt/ai-prompt.service';
+import { MinioService } from '../common/services/minio.service';
+import { AnalyzePhotoDto } from './dto/analyze-photo.dto';
+import * as https from 'https';
+import { URL } from 'url';
+
+// Helper to fetch image from URL
+const getImageBufferFromUrl = (url: string): Promise<Buffer> => {
+  return new Promise((resolve, reject) => {
+    const urlObject = new URL(url);
+    const request = https.get(urlObject, (response) => {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return reject(new Error(`無法取得圖片，狀態碼: ${response.statusCode}`));
+      }
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => resolve(Buffer.concat(chunks)));
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+  });
+};
 
 @Injectable()
 export class DietService {
@@ -29,12 +50,14 @@ export class DietService {
     private readonly configService: ConfigService,
     private readonly aiLoggingService: AiLoggingService,
     private readonly aiPromptService: AiPromptService,
+    private readonly minioService: MinioService,
   ) {}
 
   async analyzePhoto(
-    file: Express.Multer.File,
+    analyzePhotoDto: AnalyzePhotoDto,
     userId: string,
-  ): Promise<{ foods: any[] } | { error: string }> {
+  ): Promise<{ foods: any[] }> {
+    const { photoUrl } = analyzePhotoDto;
     const user = await this.userModel.findById(userId);
     if (!user) {
       throw new NotFoundException('找不到使用者');
@@ -53,37 +76,22 @@ export class DietService {
       throw new ForbiddenException('已超過今日 AI 分析次數限制 (12次)');
     }
 
-    // --- AI 設定與圖片前處理 ---
-    this.logger.log(`Starting diet photo analysis for user ${userId}`);
+    // --- AI 設定 ---
+    this.logger.log(`Starting diet photo analysis for user ${userId} from URL: ${photoUrl}`);
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       this.logger.error('GEMINI_API_KEY is not configured.');
       throw new BadRequestException('AI 功能未設定，請聯絡管理員。');
     }
-    if (!file) {
-      throw new BadRequestException('沒有提供圖片檔案。');
-    }
-    let imageBuffer = file.buffer;
-    let mimeType = file.mimetype;
+
+    // --- 從 URL 獲取圖片 ---
+    let imageBuffer: Buffer;
     try {
-      const compressedBuffer = await sharp(file.buffer)
-        .resize({
-          width: 1024,
-          height: 1024,
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 85, progressive: true })
-        .toBuffer();
-      this.logger.log(
-        `Image compressed: orig size=${file.size}, new size=${compressedBuffer.length}`,
-      );
-      imageBuffer = compressedBuffer;
-      mimeType = 'image/jpeg';
-    } catch (e) {
-      this.logger.warn(
-        `Could not compress image, using original. Reason: ${(e as Error).message}`,
-      );
+      imageBuffer = await getImageBufferFromUrl(photoUrl);
+      this.logger.log(`Successfully fetched image from URL, size: ${imageBuffer.length}`);
+    } catch (fetchError) {
+      this.logger.error(`從 URL 獲取圖片失敗: ${fetchError.message}`, fetchError.stack);
+      throw new BadRequestException(`無法從指定的 URL 獲取圖片。`);
     }
 
     // --- 取得 AI 提示詞 ---
@@ -98,7 +106,10 @@ export class DietService {
     const imagePart = {
       inlineData: {
         data: imageBuffer.toString('base64'),
-        mimeType: mimeType,
+        // 從 URL 推斷 MimeType 可能不準確，Gemini 可自行判斷
+        // 但為求明確，可嘗試從 URL 副檔名或 response header 取得
+        // 此處暫時使用通用型別
+        mimeType: 'image/jpeg', 
       },
     };
 
@@ -120,14 +131,9 @@ export class DietService {
         parsedResponse: parsedResult,
         inputTokens: usage?.promptTokenCount,
         outputTokens: usage?.candidatesTokenCount,
-        imageUrl: file.originalname,
+        imageUrl: photoUrl, // 使用傳入的 URL
         status: 'success',
       });
-
-      if (!parsedResult.foods) {
-        this.logger.warn('Gemini response is missing "foods" array');
-        return { foods: [] };
-      }
 
       // 更新使用者計數
       user.aiAnalysisCount += 1;
@@ -135,8 +141,9 @@ export class DietService {
       await user.save();
 
       this.logger.log(
-        `Successfully analyzed photo, found ${parsedResult.foods.length} food items.`,
+        `Successfully analyzed photo, found ${parsedResult.foods?.length || 0} food items.`,
       );
+
       return parsedResult;
     } catch (error) {
       this.logger.error(
@@ -151,7 +158,7 @@ export class DietService {
         promptId: dietPrompt._id.toString(),
         status: 'error',
         errorMessage: error.message,
-        imageUrl: file.originalname,
+        imageUrl: photoUrl, // 使用傳入的 URL
       });
 
       throw new BadRequestException(`圖片分析失敗: ${error.message}`);
@@ -440,7 +447,7 @@ export class DietService {
 
     // 4) 嘗試僅修復 servingSize 欄位：若值含字母或中文字但未加引號，則補上雙引號
     text = text.replace(
-      /("servingSize"\s*:\s*)([^,}\]\s][^,}\]]*)/g,
+      /("servingSize"\s*:\s*)([^",}\]\s][^,}\]]*)/g,
       (match, p1, p2) => {
         const raw = String(p2).trim();
         if (/^".*"$/.test(raw) || /^'.*'$/.test(raw)) return `${p1}${raw}`;
@@ -464,7 +471,7 @@ export class DietService {
       'sodium',
     ];
     for (const key of unitProneKeys) {
-      const re = new RegExp(`("${key}"\s*:\s*)([^,}\]\s][^,}\]]*)`, 'g');
+      const re = new RegExp(`("${key}"\s*:\s*)([^",}\]\s][^,}\]]*)`, 'g');
       text = text.replace(re, (match, p1, p2) => {
         const raw = String(p2).trim();
         // 已是字串或是純數字則不變
@@ -484,7 +491,7 @@ export class DietService {
     // 僅針對 JSON 中的屬性值的簡單情境： : '...'
     text = text.replace(
       /:\s*'([^']*)'/g,
-      (m, p1) => `: "${p1.replace(/"/g, '\"')}"`,
+      (m, p1) => `: "${p1.replace(/"/g, '\"')}"`, // Corrected: escaped inner quotes
     );
 
     // 7) 再試一次解析

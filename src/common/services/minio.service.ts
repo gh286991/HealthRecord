@@ -36,7 +36,10 @@ export class MinioService {
       );
 
       // 返回檔案的公開 URL
-      return `${process.env.MINIO_END_POINT}/${this.bucketName}/${objectName}`;
+      const endpoint = process.env.MINIO_END_POINT;
+      // 確保返回的是完整的 URL
+      const protocol = endpoint.startsWith('localhost') ? 'http://' : 'https://';
+      return `${protocol}${endpoint}/${this.bucketName}/${objectName}`;
     } catch (error) {
       throw new Error(`檔案上傳失敗: ${error.message}`);
     }

@@ -26,12 +26,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MinioService } from '../common/services/minio.service';
 import { Logger } from '@nestjs/common';
+import { AnalyzePhotoDto } from './dto/analyze-photo.dto';
+
 // 動態載入 sharp，避免在不同模組系統下的相容性問題
-let sharpLib: any;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  sharpLib = require('sharp');
-} catch {}
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sharpLib = require('sharp');
 
 @ApiTags('飲食紀錄')
 @Controller('diet-records')
@@ -45,25 +44,9 @@ export class DietController {
   private readonly logger = new Logger(DietController.name);
 
   @Post('analyze-photo')
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
-  })
-  @ApiOperation({ summary: '傳入圖片以分析食物營養' })
-  async analyzePhoto(
-    @Request() req,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    return this.dietService.analyzePhoto(file, req.user.userId);
+  @ApiOperation({ summary: '傳入圖片 URL 以分析食物營養' })
+  async analyzePhoto(@Request() req, @Body() analyzePhotoDto: AnalyzePhotoDto) {
+    return this.dietService.analyzePhoto(analyzePhotoDto, req.user.userId);
   }
 
   @Post()

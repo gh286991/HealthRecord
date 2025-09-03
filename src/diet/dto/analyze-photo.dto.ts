@@ -1,12 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsUrl } from 'class-validator';
+import { IsUrl } from 'class-validator';
 
 export class AnalyzePhotoDto {
   @ApiProperty({
-    description: '已上傳圖片的 URL',
-    example: 'https://your-minio-server.com/bucket/image.jpg',
+    description: '要分析的餐點照片的公開網址',
+    example: 'https://storage.googleapis.com/bucket-name/image.webp',
   })
-  @IsString()
-  @IsUrl({}, { message: 'imageUrl 必須是有效的 URL' })
-  imageUrl: string;
+  @IsUrl({}, { message: '提供的 photoUrl 必須是有效的網址' })
+  photoUrl: string;
 }
