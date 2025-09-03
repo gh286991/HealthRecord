@@ -45,27 +45,7 @@ export class DietController {
   private readonly logger = new Logger(DietController.name);
 
   @Post('analyze-photo')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      fileFilter: (req, file, cb) => {
-        const allowedMimes = [
-          'image/jpeg',
-          'image/jpg',
-          'image/png',
-          'image/gif',
-          'image/webp',
-        ];
-        if (!allowedMimes.includes(file.mimetype)) {
-          return cb(
-            new Error('只允許上傳 JPG、JPEG、PNG、GIF、WebP 格式的圖片檔案'),
-            false,
-          );
-        }
-        cb(null, true);
-      },
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -78,7 +58,7 @@ export class DietController {
       },
     },
   })
-  @ApiOperation({ summary: '上傳照片以分析食物營養' })
+  @ApiOperation({ summary: '傳入圖片以分析食物營養' })
   async analyzePhoto(
     @Request() req,
     @UploadedFile() file: Express.Multer.File,

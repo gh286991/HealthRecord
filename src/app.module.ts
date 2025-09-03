@@ -8,6 +8,8 @@ import { FoodModule } from './food/food.module';
 import { DietModule } from './diet/diet.module';
 import { WorkoutModule } from './workout/workout.module';
 import { CommonModule } from './common/common.module';
+import { AiLoggingModule } from './ai-logging/ai-logging.module';
+import { AiPromptModule } from './ai-prompt/ai-prompt.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { CommonModule } from './common/common.module';
     FoodModule,
     DietModule,
     WorkoutModule,
+    AiLoggingModule,
+    AiPromptModule,
   ],
   controllers: [AppController],
   providers: [AppService],
