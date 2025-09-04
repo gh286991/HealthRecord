@@ -1,6 +1,6 @@
-import { IsOptional, IsString, IsEnum, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsDateString, IsNumber } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Gender } from '../schemas/user.schema';
+import { Gender, ActivityLevel } from '../schemas/user.schema';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({
@@ -45,4 +45,31 @@ export class UpdateUserDto {
   @IsOptional()
   @IsDateString({}, { message: 'Birthday must be a valid date' })
   birthday?: string;
+
+  @ApiPropertyOptional({
+    description: '身高 (公分)',
+    example: 175,
+  })
+  @IsOptional()
+  @IsNumber()
+  height?: number;
+
+  @ApiPropertyOptional({
+    description: '體重 (公斤)',
+    example: 70,
+  })
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
+
+  @ApiPropertyOptional({
+    description: '活動量',
+    enum: ActivityLevel,
+    example: ActivityLevel.MODERATELY_ACTIVE,
+  })
+  @IsOptional()
+  @IsEnum(ActivityLevel, {
+    message: 'Activity level must be sedentary, lightly_active, moderately_active, very_active, or extra_active',
+  })
+  activityLevel?: ActivityLevel;
 }

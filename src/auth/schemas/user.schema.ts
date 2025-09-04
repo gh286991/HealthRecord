@@ -10,6 +10,14 @@ export enum Gender {
   OTHER = 'other',
 }
 
+export enum ActivityLevel {
+  SEDENTARY = 'sedentary', // 久坐：很少或沒有運動
+  LIGHTLY_ACTIVE = 'lightly_active', // 輕度活躍：每週輕度運動/體育活動 1-3 天
+  MODERATELY_ACTIVE = 'moderately_active', // 中度活躍：每週中度運動/體育活動 3-5 天
+  VERY_ACTIVE = 'very_active', // 非常活躍：每週高強度運動/體育活動 6-7 天
+  EXTRA_ACTIVE = 'extra_active', // 極度活躍：非常高強度運動/體育活動 & 從事體力勞動或每天訓練兩次
+}
+
 @Schema({ timestamps: true })
 export class User {
   @Prop({ required: true, unique: true, trim: true })
@@ -41,6 +49,18 @@ export class User {
   @Prop({ required: false, trim: true, type: Date })
   birthday: string;
 
+  // 使用者身高 (公分)
+  @Prop({ required: false, type: Number })
+  height?: number;
+
+  // 使用者體重 (公斤)
+  @Prop({ required: false, type: Number })
+  weight?: number;
+
+  // 使用者活動量
+  @Prop({ required: false, trim: true, enum: ActivityLevel })
+  activityLevel?: ActivityLevel;
+
   // AI 分析計數
   @Prop({ type: Number, default: 0 })
   aiAnalysisCount: number;
@@ -63,6 +83,9 @@ UserSchema.set('toJSON', {
       bio: ret.bio,
       gender: ret.gender,
       birthday: ret.birthday,
+      height: ret.height,
+      weight: ret.weight,
+      activityLevel: ret.activityLevel,
       createdAt: ret.createdAt,
       updatedAt: ret.updatedAt,
     };
@@ -88,6 +111,9 @@ UserSchema.set('toObject', {
       bio: ret.bio,
       gender: ret.gender,
       birthday: ret.birthday,
+      height: ret.height,
+      weight: ret.weight,
+      activityLevel: ret.activityLevel,
       createdAt: ret.createdAt,
       updatedAt: ret.updatedAt,
     };
