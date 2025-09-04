@@ -10,6 +10,7 @@ import { WorkoutModule } from './workout/workout.module';
 import { CommonModule } from './common/common.module';
 import { AiLoggingModule } from './ai-logging/ai-logging.module';
 import { AiPromptModule } from './ai-prompt/ai-prompt.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AiPromptModule } from './ai-prompt/ai-prompt.module';
     WorkoutModule,
     AiLoggingModule,
     AiPromptModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
