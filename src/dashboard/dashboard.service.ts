@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User, UserDocument, Gender, ActivityLevel } from '../auth/schemas/user.schema';
+import { User, UserDocument, Gender, ActivityLevel, Goal } from '../auth/schemas/user.schema';
 import { DietService } from '../diet/diet.service';
 import { WorkoutService } from '../workout/workout.service';
 import { DashboardDto } from './dto/dashboard.dto';
@@ -16,6 +16,12 @@ export class DashboardService {
     [ActivityLevel.MODERATELY_ACTIVE]: 1.55,
     [ActivityLevel.VERY_ACTIVE]: 1.725,
     [ActivityLevel.EXTRA_ACTIVE]: 1.9,
+  };
+
+  private goalOffset: Record<Goal, number> = {
+    [Goal.WEIGHT_LOSS]: -300,
+    [Goal.MAINTAIN]: 0,
+    [Goal.MUSCLE_GAIN]: 300,
   };
 
   constructor(
@@ -33,7 +39,8 @@ export class DashboardService {
       return null;
     }
 
-    const calculation = this.calculateTDEE(user);
+    const calculation = this.calculateTDEE(user as User);
+    const calorieGoal = calculation.tdee + (this.goalOffset[user.goal] || 0);
 
     const [dietSummary, workoutRecords, workoutPlans] = await Promise.all([
       this.dietService.getDailySummary(userId, today),
@@ -44,6 +51,8 @@ export class DashboardService {
     return {
       tdee: calculation.tdee,
       bmr: calculation.bmr,
+      calorieGoal: calorieGoal,
+      goal: user.goal,
       activityLevel: user.activityLevel,
       activityMultiplier: calculation.multiplier,
       dietSummary,

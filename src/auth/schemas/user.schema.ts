@@ -18,6 +18,12 @@ export enum ActivityLevel {
   EXTRA_ACTIVE = 'extra_active', // 極度活躍：非常高強度運動/體育活動 & 從事體力勞動或每天訓練兩次
 }
 
+export enum Goal {
+  WEIGHT_LOSS = 'weight_loss', // 減重
+  MAINTAIN = 'maintain', // 維持
+  MUSCLE_GAIN = 'muscle_gain', // 增肌
+}
+
 @Schema({ timestamps: true })
 export class User {
   @Prop({ required: true, unique: true, trim: true })
@@ -61,6 +67,10 @@ export class User {
   @Prop({ required: false, trim: true, enum: ActivityLevel })
   activityLevel?: ActivityLevel;
 
+  // 使用者目標
+  @Prop({ required: false, trim: true, enum: Goal, default: Goal.MAINTAIN })
+  goal?: Goal;
+
   // AI 分析計數
   @Prop({ type: Number, default: 0 })
   aiAnalysisCount: number;
@@ -86,6 +96,7 @@ UserSchema.set('toJSON', {
       height: ret.height,
       weight: ret.weight,
       activityLevel: ret.activityLevel,
+      goal: ret.goal,
       createdAt: ret.createdAt,
       updatedAt: ret.updatedAt,
     };
@@ -114,6 +125,7 @@ UserSchema.set('toObject', {
       height: ret.height,
       weight: ret.weight,
       activityLevel: ret.activityLevel,
+      goal: ret.goal,
       createdAt: ret.createdAt,
       updatedAt: ret.updatedAt,
     };

@@ -3,6 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { DietRecord } from '../../diet/schemas/diet-record.schema';
 import { WorkoutRecord } from '../../workout/schemas/workout-record.schema';
 import { WorkoutPlan } from '../../workout/schemas/workout-plan.schema';
+import { Goal } from '../../auth/schemas/user.schema';
 
 class DailyTotals {
   @ApiProperty()
@@ -35,6 +36,19 @@ export class DashboardDto {
     example: 1500,
   })
   bmr: number;
+
+  @ApiProperty({
+    description: 'Recommended daily calorie intake based on goal',
+    example: 2200,
+  })
+  calorieGoal: number;
+
+  @ApiProperty({
+    description: "User's fitness goal",
+    example: 'weight_loss',
+    enum: Goal,
+  })
+  goal: Goal;
 
   @ApiProperty({
     description: "User's activity level string",

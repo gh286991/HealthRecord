@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsEnum, IsDateString, IsNumber } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Gender, ActivityLevel } from '../schemas/user.schema';
+import { Gender, ActivityLevel, Goal } from '../schemas/user.schema';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({
@@ -72,4 +72,15 @@ export class UpdateUserDto {
     message: 'Activity level must be sedentary, lightly_active, moderately_active, very_active, or extra_active',
   })
   activityLevel?: ActivityLevel;
+
+  @ApiPropertyOptional({
+    description: '目標',
+    enum: Goal,
+    example: Goal.MAINTAIN,
+  })
+  @IsOptional()
+  @IsEnum(Goal, {
+    message: 'Goal must be weight_loss, maintain, or muscle_gain',
+  })
+  goal?: Goal;
 }
