@@ -100,7 +100,7 @@ export class DietService {
     const prompt = dietPrompt.text;
 
     // --- 呼叫 AI 模型 ---
-    const modelName = 'gemini-1.5-flash';
+    const modelName = 'gemini-2.0-flash';
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
     const imagePart = {

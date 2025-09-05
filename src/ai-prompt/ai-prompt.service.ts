@@ -26,8 +26,15 @@ export class AiPromptService {
       throw new NotFoundException(`找不到名稱為 '${name}' 的 AI 提示詞。`);
     }
     
-    // Sort using semver for robustness
-    const sorted = prompts.sort((a, b) => semver.rcompare(a.version, b.version));
+    // Sort using semver for robustness, but handle invalid versions
+    const sorted = prompts.sort((a, b) => {
+      try {
+        return semver.rcompare(a.version, b.version);
+      } catch (error) {
+        // If semver comparison fails, fall back to string comparison
+        return b.version.localeCompare(a.version);
+      }
+    });
     
     return sorted[0];
   }
@@ -45,9 +52,14 @@ export class AiPromptService {
 
     if (!latestPrompt) {
       // Create first version
-      const newPrompt = new this.aiPromptModel({ name, text, version: '1.0' });
-      this.logger.log(`Created first version of prompt '${name}' (v1.0)`);
-      return newPrompt.save();
+      const newPrompt = new this.aiPromptModel({ 
+        name, 
+        text, 
+        version: '1.0.0' 
+      });
+      this.logger.log(`Created first version of prompt '${name}' (v1.0.0)`);
+      const savedPrompt = await newPrompt.save();
+      return savedPrompt;
     }
 
     // Check if text is identical to the latest version
@@ -58,8 +70,33 @@ export class AiPromptService {
 
     // Increment version and create new prompt
     const newVersion = semver.inc(latestPrompt.version, 'patch');
-    const newPrompt = new this.aiPromptModel({ name, text, version: newVersion });
+    const newPrompt = new this.aiPromptModel({ 
+      name, 
+      text, 
+      version: newVersion 
+    });
     this.logger.log(`Creating new version of prompt '${name}': v${latestPrompt.version} -> v${newVersion}`);
-    return newPrompt.save();
+    const savedPrompt = await newPrompt.save();
+    return savedPrompt;
+  }
+
+  async getAllPrompts(): Promise<AiPromptDocument[]> {
+    // 獲取所有提示詞的最新版本
+    const allPrompts = await this.aiPromptModel.find().sort({ name: 1, version: -1 }).exec();
+    
+    // 按名稱分組，只保留每個名稱的最新版本
+    const latestPrompts = new Map<string, AiPromptDocument>();
+    
+    for (const prompt of allPrompts) {
+      if (!latestPrompts.has(prompt.name)) {
+        latestPrompts.set(prompt.name, prompt);
+      }
+    }
+    
+    return Array.from(latestPrompts.values());
+  }
+
+  async getPromptVersions(name: string): Promise<AiPromptDocument[]> {
+    return this.aiPromptModel.find({ name }).sort({ version: -1 }).exec();
   }
 }

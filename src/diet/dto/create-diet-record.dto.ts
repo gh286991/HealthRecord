@@ -28,43 +28,43 @@ export class FoodItemDto {
   @ApiProperty({ description: '卡路里', example: 150, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '卡路里不能小於 0' })
   calories?: number;
 
   @ApiProperty({ description: '蛋白質(g)', example: 3.5, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '蛋白質不能小於 0' })
   protein?: number;
 
   @ApiProperty({ description: '碳水化合物(g)', example: 30, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '碳水化合物不能小於 0' })
   carbohydrates?: number;
 
   @ApiProperty({ description: '脂肪(g)', example: 0.5, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '脂肪不能小於 0' })
   fat?: number;
 
   @ApiProperty({ description: '纖維(g)', example: 1.0, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '纖維不能小於 0' })
   fiber?: number;
 
   @ApiProperty({ description: '糖分(g)', example: 0, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '糖分不能小於 0' })
   sugar?: number;
 
   @ApiProperty({ description: '鈉含量(mg)', example: 5, required: false })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0, { message: '鈉含量不能小於 0' })
   sodium?: number;
 }
 
