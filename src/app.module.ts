@@ -11,6 +11,7 @@ import { CommonModule } from './common/common.module';
 import { AiLoggingModule } from './ai-logging/ai-logging.module';
 import { AiPromptModule } from './ai-prompt/ai-prompt.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { BodyRecordModule } from './body-record/body-record.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AiLoggingModule,
     AiPromptModule,
     DashboardModule,
+    BodyRecordModule,
   ],
   controllers: [AppController],
   providers: [AppService],
