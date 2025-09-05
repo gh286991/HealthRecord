@@ -100,7 +100,7 @@ export class DietService {
     const prompt = dietPrompt.text;
 
     // --- 呼叫 AI 模型 ---
-    const modelName = 'gemini-2.0-flash';
+    const modelName = 'gemini-2.0-flash-lite';
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
     const imagePart = {
@@ -144,7 +144,12 @@ export class DietService {
         `Successfully analyzed photo, found ${parsedResult.foods?.length || 0} food items.`,
       );
 
-      return parsedResult;
+      // 處理食物項目，將字串轉換為數字
+      const processedFoods = parsedResult.foods ? this.processFoodItems(parsedResult.foods) : [];
+      
+      return {
+        foods: processedFoods
+      };
     } catch (error) {
       this.logger.error(
         `Error analyzing photo with Gemini: ${error.message}`,
