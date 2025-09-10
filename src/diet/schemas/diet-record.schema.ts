@@ -50,6 +50,9 @@ export class DietRecord {
   @Prop()
   notes?: string; // 備註
 
+  @Prop({ type: Number, required: false, min: 0 })
+  price?: number; // 價錢
+
   @Prop({ default: 0 })
   totalCalories: number;
 
@@ -71,8 +74,11 @@ export class DietRecord {
   @Prop({ default: 0 })
   totalSodium: number;
 
-  @Prop({ default: '' })
-  photoUrl: string; // 餐點照片網址
+  @Prop({ type: [String], default: [] })
+  photoUrls: string[]; // 餐點照片網址
+
+  @Prop({ type: String, required: false }) // For backward compatibility
+  photoUrl: string; 
 
   @Prop({ default: false })
   isDraft: boolean; // 是否為草稿狀態

@@ -11,6 +11,7 @@ import {
   Request,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,7 +24,7 @@ import { DietService } from './diet.service';
 import { CreateDietRecordDto } from './dto/create-diet-record.dto';
 import { UpdateDietRecordDto } from './dto/update-diet-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { MinioService } from '../common/services/minio.service';
 import { Logger } from '@nestjs/common';
 import { AnalyzePhotoDto } from './dto/analyze-photo.dto';
@@ -115,6 +116,95 @@ export class DietController {
     return this.dietService.remove(req.user.userId, id);
   }
 
+  @Post(':id/photos') // Changed from photo to photos
+  @UseInterceptors(
+    FilesInterceptor('files', 10, { // Changed to FilesInterceptor, allowing up to 10 files
+      fileFilter: (req, file, cb) => {
+        const allowedMimes = [
+          'image/jpeg',
+          'image/jpg',
+          'image/png',
+          'image/gif',
+          'image/webp',
+        ];
+
+        if (!allowedMimes.includes(file.mimetype)) {
+          return cb(
+            new Error('只允許上傳 JPG、JPEG、PNG、GIF、WebP 格式的圖片檔案'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: { // Changed from file to files
+          type: 'array', // Changed to array
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+      },
+    },
+  })
+  @ApiOperation({ summary: '上傳多張飲食紀錄照片' })
+  async uploadPhotos(
+    @Request() req,
+    @Param('id') id: string,
+    @UploadedFiles() files: Array<Express.Multer.File>,
+  ) {
+    const photoUrls = [];
+    for (const file of files) {
+      let bufferToUpload = file.buffer;
+      let contentType = 'image/webp';
+      let targetFileName = `${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}.webp`;
+
+      try {
+        if (sharpLib) {
+          const converted = await sharpLib(file.buffer)
+            .rotate() // 修正 EXIF 方向
+            .webp({ quality: 80 })
+            .toBuffer();
+          bufferToUpload = converted;
+          this.logger.log(
+            `Convert to webp success: orig=${file.mimetype}(${file.size}) => webp(${bufferToUpload.length}), name=${targetFileName}`,
+          );
+        } else {
+          throw new Error('sharp not available');
+        }
+      } catch (e) {
+        bufferToUpload = file.buffer;
+        contentType = file.mimetype;
+        targetFileName = this.minioService.generateUniqueFileName(file.originalname);
+        this.logger.warn(
+          `Convert to webp failed, fallback original: reason=${(e as Error).message}, name=${targetFileName}, type=${contentType}`,
+        );
+      }
+
+      const photoUrl = await this.minioService.uploadFile(
+        targetFileName,
+        bufferToUpload,
+        contentType,
+        'diet-records',
+      );
+      photoUrls.push(photoUrl);
+    }
+
+    // When uploading multiple photos, we overwrite existing ones.
+    await this.dietService.update(req.user.userId, id, { photoUrls });
+
+    return { photoUrls };
+  }
+
   @Post(':id/photo')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -150,40 +240,32 @@ export class DietController {
       },
     },
   })
-  @ApiOperation({ summary: '上傳飲食紀錄照片' })
+  @ApiOperation({ summary: '上傳單張飲食紀錄照片 (舊版相容)' })
   async uploadPhoto(
     @Request() req,
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    // 先嘗試轉為 WebP，失敗則回退原圖
     let bufferToUpload = file.buffer;
     let contentType = 'image/webp';
-    // 成功轉檔時強制使用 .webp 檔名
     let targetFileName = `${Date.now()}-${Math.random()
       .toString(36)
       .substring(2, 8)}.webp`;
+
     try {
       if (sharpLib) {
         const converted = await sharpLib(file.buffer)
-          .rotate() // 修正 EXIF 方向
+          .rotate()
           .webp({ quality: 80 })
           .toBuffer();
         bufferToUpload = converted;
-        this.logger.log(
-          `Convert to webp success: orig=${file.mimetype}(${file.size}) => webp(${bufferToUpload.length}), name=${targetFileName}`,
-        );
       } else {
         throw new Error('sharp not available');
       }
     } catch (e) {
-      // 回退：使用原始檔
       bufferToUpload = file.buffer;
       contentType = file.mimetype;
       targetFileName = this.minioService.generateUniqueFileName(file.originalname);
-      this.logger.warn(
-        `Convert to webp failed, fallback original: reason=${(e as Error).message}, name=${targetFileName}, type=${contentType}`,
-      );
     }
 
     const photoUrl = await this.minioService.uploadFile(
@@ -193,8 +275,16 @@ export class DietController {
       'diet-records',
     );
 
-    await this.dietService.update(req.user.userId, id, { photoUrl });
+    // For single upload, we add to the existing list of photos.
+    const record = await this.dietService.findOne(req.user.userId, id);
+    const existingUrls = record.photoUrls || [];
+    if (record.photoUrl && !existingUrls.includes(record.photoUrl)) {
+        existingUrls.unshift(record.photoUrl);
+    }
+    const photoUrls = [...existingUrls, photoUrl];
 
-    return { photoUrl };
+    await this.dietService.update(req.user.userId, id, { photoUrls });
+
+    return { photoUrls };
   }
 }

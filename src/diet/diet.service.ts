@@ -170,11 +170,22 @@ export class DietService {
     }
   }
 
+  private handlePhotoUrlCompatibility<T extends { photoUrl?: string; photoUrls?: string[] }>(
+    dto: T,
+  ): Omit<T, 'photoUrl'> {
+    const { photoUrl, ...rest } = dto;
+    if (photoUrl && (!dto.photoUrls || dto.photoUrls.length === 0)) {
+      rest.photoUrls = [photoUrl];
+    }
+    return rest;
+  }
+
   async create(
     userId: string,
     createDietRecordDto: CreateDietRecordDto,
   ): Promise<DietRecord> {
-    const { foods, ...rest } = createDietRecordDto;
+    const dtoWithCompatibility = this.handlePhotoUrlCompatibility(createDietRecordDto);
+    const { foods, ...rest } = dtoWithCompatibility;
 
     // 處理食物項目並計算營養成分
     let processedFoods = [];
@@ -204,18 +215,19 @@ export class DietService {
     return dietRecord.save();
   }
 
-  // 創建草稿記錄，用於圖片上傳
   async createDraft(
     userId: string,
     createDietRecordDto: CreateDietRecordDto,
   ): Promise<DietRecord> {
+    const dtoWithCompatibility = this.handlePhotoUrlCompatibility(createDietRecordDto);
+
     const draftRecord = new this.dietRecordModel({
       userId: new Types.ObjectId(userId),
-      date: new Date(createDietRecordDto.date),
-      mealType: createDietRecordDto.mealType,
+      date: new Date(dtoWithCompatibility.date),
+      mealType: dtoWithCompatibility.mealType,
       foods: [],
-      notes: createDietRecordDto.notes || '',
-      photoUrl: createDietRecordDto.photoUrl || '',
+      notes: dtoWithCompatibility.notes || '',
+      photoUrls: dtoWithCompatibility.photoUrls || [],
       isDraft: true, // 標記為草稿
       totalCalories: 0,
       totalProtein: 0,
@@ -245,6 +257,7 @@ export class DietService {
 
     const results = await this.dietRecordModel
       .find(filter)
+      .select('-__v') // Ensure all fields including price are returned
       .sort({ date: -1, mealType: 1 })
       .exec();
 
@@ -276,7 +289,8 @@ export class DietService {
     id: string,
     updateDietRecordDto: UpdateDietRecordDto,
   ): Promise<DietRecord> {
-    const { foods, ...rest } = updateDietRecordDto;
+    const dtoWithCompatibility = this.handlePhotoUrlCompatibility(updateDietRecordDto);
+    const { foods, ...rest } = dtoWithCompatibility;
 
     let processedFoods;
     let totals;
@@ -322,7 +336,7 @@ export class DietService {
           _id: new Types.ObjectId(id),
           userId: new Types.ObjectId(userId),
         },
-        updateData,
+        { $set: updateData, $unset: { photoUrl: '' } }, // Unset old field
         { new: true },
       )
       .exec();

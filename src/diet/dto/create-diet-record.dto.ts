@@ -96,7 +96,19 @@ export class CreateDietRecordDto {
   @IsString()
   notes?: string;
 
-  @ApiProperty({ description: '餐點照片網址', required: false })
+  @ApiProperty({ description: '價錢', required: false, example: 100 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
+
+  @ApiProperty({ description: '餐點照片網址', type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  photoUrls?: string[];
+
+  @ApiProperty({ description: '餐點照片網址 (舊版相容)', required: false })
   @IsOptional()
   @IsString()
   photoUrl?: string;
