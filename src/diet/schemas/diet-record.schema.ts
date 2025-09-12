@@ -53,6 +53,9 @@ export class DietRecord {
   @Prop({ type: Number, required: false, min: 0 })
   price?: number; // 價錢
 
+  @Prop({ required: false, enum: ['cash', 'card', 'mobile', 'other'] })
+  paymentMethod?: 'cash' | 'card' | 'mobile' | 'other';
+
   @Prop({ default: 0 })
   totalCalories: number;
 

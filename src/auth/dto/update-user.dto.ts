@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum, IsDateString, IsNumber } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsDateString, IsNumber, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender, ActivityLevel, Goal } from '../schemas/user.schema';
 
@@ -83,4 +83,12 @@ export class UpdateUserDto {
     message: 'Goal must be weight_loss, maintain, or muscle_gain',
   })
   goal?: Goal;
+
+  @ApiPropertyOptional({
+    description: '偏好：是否顯示付款方式欄位（飲食記錄）',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showPaymentMethod?: boolean;
 }

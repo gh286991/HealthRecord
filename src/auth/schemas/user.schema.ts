@@ -78,6 +78,10 @@ export class User {
   // 最後 AI 分析日期
   @Prop({ type: Date, default: null })
   lastAiAnalysisDate: Date;
+
+  // 偏好：是否顯示付款方式欄位（飲食記錄）
+  @Prop({ type: Boolean, default: false })
+  showPaymentMethod?: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -97,6 +101,7 @@ UserSchema.set('toJSON', {
       weight: ret.weight,
       activityLevel: ret.activityLevel,
       goal: ret.goal,
+      showPaymentMethod: ret.showPaymentMethod,
       createdAt: ret.createdAt,
       updatedAt: ret.updatedAt,
     };
@@ -126,6 +131,7 @@ UserSchema.set('toObject', {
       weight: ret.weight,
       activityLevel: ret.activityLevel,
       goal: ret.goal,
+      showPaymentMethod: ret.showPaymentMethod,
       createdAt: ret.createdAt,
       updatedAt: ret.updatedAt,
     };

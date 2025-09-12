@@ -37,7 +37,7 @@ export class AuthService {
 
   async updateProfile(userId: string, updateUserDto: UpdateUserDto) {
     // 使用白名單方式，只允許特定欄位被更新
-    const allowedFields = ['name', 'avatar', 'bio', 'gender', 'birthday', 'height', 'weight', 'activityLevel', 'goal'];
+    const allowedFields = ['name', 'avatar', 'bio', 'gender', 'birthday', 'height', 'weight', 'activityLevel', 'goal', 'showPaymentMethod'];
     const allowedUpdates: any = {};
 
     allowedFields.forEach((field) => {

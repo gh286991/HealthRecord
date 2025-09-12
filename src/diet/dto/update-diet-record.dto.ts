@@ -104,6 +104,11 @@ export class UpdateDietRecordDto {
   @Min(0)
   price?: number;
 
+  @ApiProperty({ description: '付款方式', required: false, enum: ['cash', 'card', 'mobile', 'other'] })
+  @IsOptional()
+  @IsEnum(['cash', 'card', 'mobile', 'other'])
+  paymentMethod?: 'cash' | 'card' | 'mobile' | 'other';
+
   @ApiProperty({ description: '餐點照片網址', type: [String], required: false })
   @IsOptional()
   @IsArray()
