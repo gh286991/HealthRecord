@@ -68,4 +68,41 @@ export class AuthService {
       accessToken: this.jwtService.sign(payload),
     };
   }
+
+  createLinkToken(payload: { userId: string; provider: string; providerId: string; email?: string }) {
+    // 短期有效的連結用 token，區分用途
+    return this.jwtService.sign({
+      typ: 'link',
+      sub: payload.userId,
+      provider: payload.provider,
+      providerId: payload.providerId,
+      email: payload.email,
+    }, { expiresIn: '15m' });
+  }
+
+  async linkOAuth(linkToken: string) {
+    try {
+      const decoded: any = this.jwtService.verify(linkToken);
+      if (decoded?.typ !== 'link') throw new Error('Invalid token type');
+      const user = await this.userModel.findById(decoded.sub);
+      if (!user) throw new Error('User not found');
+      // 若其他帳號已經綁了此 providerId，避免衝突
+      const exists = await this.userModel.findOne({ provider: decoded.provider, providerId: decoded.providerId, _id: { $ne: user._id } });
+      if (exists) throw new Error('Provider already linked to another account');
+      // 寫入 provider 綁定
+      user.provider = user.provider || decoded.provider;
+      user.providerId = user.providerId || decoded.providerId;
+      // 若使用者 email 未設定或大小寫不同，更新為 token 內 email（小寫）
+      if (decoded.email) {
+        const lower = String(decoded.email).toLowerCase();
+        if (!user.email || user.email.toLowerCase() !== lower) user.email = lower as any;
+      }
+      await user.save();
+      // 回傳正式 accessToken
+      const { accessToken } = await this.login(user);
+      return { accessToken };
+    } catch (e) {
+      throw new ConflictException('Link token invalid or expired');
+    }
+  }
 }

@@ -27,13 +27,34 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     profile: Profile,
   ): Promise<any> {
     const email = profile.emails?.[0]?.value;
+    const normalizedEmail = email ? email.toLowerCase() : undefined;
     const displayName = profile.displayName || email || `google_${profile.id}`;
     const avatar = profile.photos?.[0]?.value;
 
-    // Find existing user by email if present
-    let user = email
-      ? await this.userModel.findOne({ email })
-      : await this.userModel.findOne({ username: `google_${profile.id}` });
+    // 先以 email（不分大小寫）尋找，確保先走 "確認綁定" 流程
+    let user: any = null;
+    if (normalizedEmail) {
+      const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      user = await this.userModel.findOne({ email: { $regex: new RegExp(`^${escape(normalizedEmail)}$`, 'i') } });
+      if (user) {
+        // 已有同信箱帳號
+        if (user.provider === 'google' && user.providerId) {
+          // 已綁定 → 直接登入（後面做 idempotent 更新）
+        } else {
+          // 未綁定 → 要求前端確認綁定
+          const { password, ...result } = user.toObject();
+          return { ...result, __needsLink: true, __providerId: profile.id, __provider: 'google' };
+        }
+      }
+    }
+    if (!user) {
+      // 若 email 沒命中，再以 providerId 尋找既有綁定
+      user = await this.userModel.findOne({ provider: 'google', providerId: profile.id });
+    }
+    if (!user) {
+      // 最後退回以 google_<id> 使用者名稱尋找
+      user = await this.userModel.findOne({ username: `google_${profile.id}` });
+    }
 
     let isNew = false;
     if (!user) {
@@ -50,7 +71,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       const randomPassword = crypto.randomBytes(24).toString('hex');
       user = new this.userModel({
         username,
-        email: email || `${username}@example.com`,
+        email: normalizedEmail || `${username}@example.com`,
         password: randomPassword,
         name: displayName,
         avatar,
@@ -60,11 +81,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       await user.save();
       isNew = true;
     } else {
-      // Ensure provider info is recorded (idempotent)
-      const shouldUpdate = !user.provider || !user.providerId || user.avatar !== avatar || user.name !== displayName;
+      // 如果找到相同信箱的帳號，但尚未綁定 Google，先回前端請使用者確認是否要綁定
+      if (user.provider !== 'google' || !user.providerId) {
+        const { password, ...result } = user.toObject();
+        return { ...result, __needsLink: true, __providerId: profile.id, __provider: 'google' };
+      }
+
+      // 已有綁定 → 做 idempotent 更新頭像/名稱
+      const shouldUpdate = user.avatar !== avatar || user.name !== displayName;
       if (shouldUpdate) {
-        user.provider = user.provider || 'google';
-        user.providerId = user.providerId || profile.id;
         if (avatar) user.avatar = avatar;
         if (displayName) user.name = displayName;
         await user.save();

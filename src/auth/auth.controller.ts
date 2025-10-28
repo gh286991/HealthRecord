@@ -84,10 +84,33 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google 登入回呼' })
   async googleCallback(@Request() req, @Res() res) {
+    // 若需要綁定，回前端讓使用者確認
+    if (
+      req.user?.__needsLink &&
+      (req.user?.userId || req.user?._id) &&
+      req.user?.__providerId
+    ) {
+      const linkToken = this.authService.createLinkToken({
+        userId: String(req.user.userId || req.user._id),
+        provider: 'google',
+        providerId: String(req.user.__providerId),
+        email: req.user?.email,
+      });
+      const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3030';
+      const redirectUrl = `${frontendUrl}/auth/callback?link=1&email=${encodeURIComponent(req.user?.email || '')}&linkToken=${encodeURIComponent(linkToken)}`;
+      return res.redirect(302, redirectUrl);
+    }
+
     const { accessToken } = await this.authService.login(req.user);
     const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3030';
     const isNew = req.user?.__isNew ? '1' : '0';
     const redirectUrl = `${frontendUrl}/auth/callback?token=${encodeURIComponent(accessToken)}&new=${isNew}`;
     return res.redirect(302, redirectUrl);
+  }
+
+  @Post('link-oauth')
+  @ApiOperation({ summary: '確認並綁定第三方登入（以 linkToken）' })
+  async linkOauth(@Body() body: { linkToken: string }) {
+    return this.authService.linkOAuth(body?.linkToken);
   }
 }
