@@ -6,6 +6,7 @@ import {
   Request,
   Get,
   Patch,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,11 +20,12 @@ import { RegisterDto } from './dto/register.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { LoginDto } from './dto/login.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('認證管理')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService, private config: ConfigService) {}
 
   @Post('register')
   @ApiOperation({ summary: '用戶註冊' })
@@ -67,5 +69,25 @@ export class AuthController {
       req.user.userId || req.user.sub,
       updateUserDto,
     );
+  }
+
+  // Google OAuth
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({ summary: '以 Google 登入 - 導向 Google' })
+  async googleAuth() {
+    // Guard will handle redirect
+    return { message: 'Redirecting to Google' };
+  }
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({ summary: 'Google 登入回呼' })
+  async googleCallback(@Request() req, @Res() res) {
+    const { accessToken } = await this.authService.login(req.user);
+    const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3030';
+    const isNew = req.user?.__isNew ? '1' : '0';
+    const redirectUrl = `${frontendUrl}/auth/callback?token=${encodeURIComponent(accessToken)}&new=${isNew}`;
+    return res.redirect(302, redirectUrl);
   }
 }

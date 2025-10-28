@@ -82,6 +82,14 @@ export class User {
   // 偏好：是否顯示付款方式欄位（飲食記錄）
   @Prop({ type: Boolean, default: false })
   showPaymentMethod?: boolean;
+
+  // OAuth provider (e.g., 'google')
+  @Prop({ required: false, trim: true })
+  provider?: string;
+
+  // OAuth provider unique id
+  @Prop({ required: false, trim: true })
+  providerId?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
