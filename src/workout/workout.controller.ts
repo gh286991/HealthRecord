@@ -6,13 +6,22 @@ import { UpdateWorkoutRecordDto } from './dto/update-workout-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BodyPart, WorkoutType } from './schemas/workout-record.schema';
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { ConfigService } from '@nestjs/config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User, UserDocument, Goal } from '../auth/schemas/user.schema';
 
 @ApiTags('運動紀錄')
 @Controller('workout-records')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class WorkoutController {
-  constructor(private readonly workoutService: WorkoutService) {}
+  constructor(
+    private readonly workoutService: WorkoutService,
+    private readonly configService: ConfigService,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: '建立運動紀錄' })
@@ -30,6 +39,38 @@ export class WorkoutController {
     @Query('type') type?: WorkoutType
   ) {
     return this.workoutService.findAll(req.user.userId, date, type);
+  }
+
+  @Get('range')
+  @ApiOperation({ summary: '依日期區間取得運動紀錄（含重訓）' })
+  @ApiQuery({ name: 'startDate', required: false, description: '起始日期 YYYY-MM-DD（預設 7 天前）' })
+  @ApiQuery({ name: 'endDate', required: false, description: '結束日期 YYYY-MM-DD（預設今天）' })
+  @ApiQuery({ name: 'range', required: false, description: '快捷範圍 7d | 30d' })
+  @ApiQuery({ name: 'type', required: false, enum: WorkoutType, description: '過濾運動類型' })
+  async findRange(
+    @Request() req,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('range') range?: '7d' | '30d',
+    @Query('type') type?: WorkoutType,
+  ) {
+    let start: Date;
+    let end: Date;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else if (range === '30d') {
+      end = new Date();
+      start = new Date();
+      start.setDate(end.getDate() - 29);
+    } else {
+      end = new Date();
+      start = new Date();
+      start.setDate(end.getDate() - 6);
+    }
+    start.setHours(0,0,0,0);
+    end.setHours(23,59,59,999);
+    return this.workoutService.findRange(req.user.userId, start, end, type);
   }
 
   @Get('daily-summary')
@@ -137,6 +178,67 @@ export class WorkoutController {
   resetExerciseSeeds() {
     return this.workoutService.resetExerciseSeeds();
   }
+
+  @Post('ai/advice')
+  @ApiOperation({ summary: '依範圍與摘要傳入，取得重訓 AI 建議（Gemini）' })
+  async getWorkoutAdvice(
+    @Request() req,
+    @Body() body: { range?: '7d' | '30d'; startDate?: string; endDate?: string },
+  ) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const now = new Date();
+    let start: Date;
+    let end: Date;
+    if (body?.startDate && body?.endDate) {
+      start = new Date(body.startDate);
+      end = new Date(body.endDate);
+    } else if (body?.range === '30d') {
+      end = new Date();
+      start = new Date();
+      start.setDate(end.getDate() - 29);
+    } else { // default 7d
+      end = new Date();
+      start = new Date();
+      start.setDate(end.getDate() - 6);
+    }
+    // normalize to day boundaries
+    start.setHours(0,0,0,0);
+    end.setHours(23,59,59,999);
+
+    const [summary, user] = await Promise.all([
+      this.workoutService.aggregateResistanceSummary(req.user.userId, start, end),
+      this.userModel.findById(req.user.userId).lean(),
+    ]);
+    const userGoal: Goal | undefined = user?.goal;
+    const goalText = userGoal === 'muscle_gain' ? '增肌' : userGoal === 'weight_loss' ? '減重' : '維持';
+
+    const rangeLabel = body?.startDate && body?.endDate
+      ? `${body.startDate} ~ ${body.endDate}`
+      : (body?.range === '30d' ? '近一月' : '近一週');
+
+    const prompt = `你是專業重量訓練教練。用繁體中文 Markdown 回覆（最多 8 點，每點不超過 35 字），直接條列重點，不加開場結語。請依使用者目標「${goalText}」提出建議，兼顧：訓練量與恢復、部位分配（是否失衡）、下週可執行安排（天數、動作或組數微調）。\n\n` +
+      `輸入區間：${rangeLabel}\n` +
+      `總組數：${summary.totalSets}\n` +
+      `總訓練量(kg·reps)：${summary.totalVolume}\n` +
+      `訓練天數：${summary.days}\n` +
+      `部位分佈：${JSON.stringify(summary.byBodyPart)}\n` +
+      `Top 動作：${JSON.stringify(summary.topExercises)}\n` +
+      `\n格式要求：\n- 僅輸出 Markdown，無程式碼圍欄\n- 每點以「- 」開頭\n- 內容精煉、具體可執行\n- 與目標「${goalText}」一致（如增肌→漸進超負荷；減重→控量與恢復）`;
+
+    if (!apiKey) {
+      const advice = `未設定 GEMINI_API_KEY。根據你的數據：\n- 本期總組數 ${summary.totalSets}，總量 ${summary.totalVolume}。\n- 部位分佈顯示：${summary.byBodyPart.map((b: any) => `${b.bodyPart} ${b.sets}組`).join('、') || '資料不足'}。\n- 建議：\n  1) 維持每部位每週 10–20 組為原則，缺少的部位逐步補齊。\n  2) 安排 1–2 天全面休息或低強度日，確保恢復。\n  3) Top 動作可逐週小幅進步（多 1–2 reps 或 2.5–5kg）。`;
+      return { advice };
+    }
+
+    const modelName = 'gemini-2.0-flash-lite';
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent(prompt);
+    let text = result.response.text() || '';
+    // 移除可能的程式碼區塊標記並裁切過長輸出
+    text = text.replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ''));
+    text = text.replace(/```/g, '').trim();
+    if (text.length > 1500) text = text.slice(0, 1500);
+    return { advice: text };
+  }
 }
-
-

@@ -106,6 +106,20 @@ export class WorkoutService {
     return this.workoutRecordModel.find(filter).sort({ date: -1 }).exec();
   }
 
+  async findRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+    type?: WorkoutType,
+  ): Promise<WorkoutRecord[]> {
+    const filter: any = {
+      userId: new Types.ObjectId(userId),
+      date: { $gte: startDate, $lte: endDate },
+    };
+    if (type) filter.type = type;
+    return this.workoutRecordModel.find(filter).sort({ date: 1 }).exec();
+  }
+
   async findOne(userId: string, id: string): Promise<WorkoutRecord> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException(`無效的 ID 格式: ${id}`);
@@ -191,6 +205,79 @@ export class WorkoutService {
     if (!result) {
       throw new NotFoundException(`找不到 ID 為 ${id} 的運動紀錄`);
     }
+  }
+
+  /**
+   * 聚合指定日期區間的重訓摘要
+   */
+  async aggregateResistanceSummary(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<{
+    totalSets: number;
+    totalVolume: number;
+    days: number;
+    byBodyPart: Array<{ bodyPart: string; sets: number; volume: number }>;
+    topExercises: Array<{ name: string; sets: number; volume: number; sessions: number }>;
+  }> {
+    const filter: any = {
+      userId: new Types.ObjectId(userId),
+      date: { $gte: startDate, $lte: endDate },
+    };
+    const records = await this.workoutRecordModel
+      .find(filter)
+      .sort({ date: 1 })
+      .lean();
+
+    const daysSet = new Set<string>();
+    let totalSets = 0;
+    let totalVolume = 0;
+    const bodyPartMap: Record<string, { sets: number; volume: number }> = {};
+    const exerciseMap: Record<string, { sets: number; volume: number; days: Set<string> }> = {};
+
+    for (const r of records) {
+      const day = new Date(r.date).toISOString().split('T')[0];
+      daysSet.add(day);
+
+      const exercises = (r as any).resistanceData?.exercises ?? (r as any).exercises ?? [];
+      for (const ex of exercises) {
+        const bp = ex.bodyPart || 'other';
+        const sets = Array.isArray(ex.sets) ? ex.sets.length : 0;
+        const volume = (ex.sets || []).reduce(
+          (s: number, it: any) => s + (Number(it.weight || 0) * Number(it.reps || 0)),
+          0,
+        );
+
+        totalSets += sets;
+        totalVolume += volume;
+
+        bodyPartMap[bp] = {
+          sets: (bodyPartMap[bp]?.sets || 0) + sets,
+          volume: (bodyPartMap[bp]?.volume || 0) + volume,
+        };
+
+        const name = ex.exerciseName || '未命名動作';
+        if (!exerciseMap[name]) exerciseMap[name] = { sets: 0, volume: 0, days: new Set() };
+        exerciseMap[name].sets += sets;
+        exerciseMap[name].volume += volume;
+        exerciseMap[name].days.add(day);
+      }
+    }
+
+    const byBodyPart = Object.entries(bodyPartMap).map(([bodyPart, v]) => ({ bodyPart, ...v }));
+    const topExercises = Object.entries(exerciseMap)
+      .map(([name, v]) => ({ name, sets: v.sets, volume: v.volume, sessions: v.days.size }))
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 8);
+
+    return {
+      totalSets,
+      totalVolume,
+      days: daysSet.size,
+      byBodyPart,
+      topExercises,
+    };
   }
 
   async getDailySummary(userId: string, date: string): Promise<any> {
@@ -644,5 +731,3 @@ export class WorkoutService {
     return updatedPlan;
   }
 }
-
-

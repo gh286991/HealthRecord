@@ -8,6 +8,7 @@ import { UserExercise, UserExerciseSchema } from './schemas/user-exercise.schema
 import { WorkoutPlan, WorkoutPlanSchema } from './schemas/workout-plan.schema';
 import { ExerciseSeedService } from './exercise-seed.service';
 import { WorkoutPlanController } from './workout-plan.controller';
+import { User, UserSchema } from '../auth/schemas/user.schema';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { WorkoutPlanController } from './workout-plan.controller';
       { name: Exercise.name, schema: ExerciseSchema },
       { name: UserExercise.name, schema: UserExerciseSchema },
       { name: WorkoutPlan.name, schema: WorkoutPlanSchema },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [WorkoutController, WorkoutPlanController],
@@ -23,5 +25,4 @@ import { WorkoutPlanController } from './workout-plan.controller';
   exports: [WorkoutService],
 })
 export class WorkoutModule {}
-
 
