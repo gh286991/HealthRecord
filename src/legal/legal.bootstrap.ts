@@ -24,9 +24,22 @@ export class LegalBootstrap implements OnModuleInit {
         fetch(`${FE}/terms`, { cache: 'no-store' }).then(r => r.text()),
         fetch(`${FE}/privacy`, { cache: 'no-store' }).then(r => r.text()),
       ]);
+      const extractMain = (html: string) => {
+        const m = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+        let inner = m ? m[1] : html;
+        inner = inner
+          .replace(/<header[\s\S]*?<\/header>/gi, '')
+          .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+          .replace(/<div[^>]*role=["']?navigation["']?[^>]*>[\s\S]*?<\/div>/gi, '')
+          .replace(/<div[^>]*id=["']?(site-header|app-header)["']?[^>]*>[\s\S]*?<\/div>/gi, '')
+          .replace(/<div[^>]*data-snapshot-exclude[\s\S]*?<\/div>/gi, '');
+        return inner.trim();
+      };
+      const termsInner = extractMain(termsHtml);
+      const privacyInner = extractMain(privacyHtml);
       const targets: (Partial<TermsDoc> & { doc: LegalDocType })[] = [
-        { doc: 'terms', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: termsHtml, sha256: createHash('sha256').update(termsHtml).digest('hex'), requireReconsent: true },
-        { doc: 'privacy', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: privacyHtml, sha256: createHash('sha256').update(privacyHtml).digest('hex'), requireReconsent: true },
+        { doc: 'terms', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: termsInner, sha256: createHash('sha256').update(termsInner).digest('hex'), requireReconsent: true },
+        { doc: 'privacy', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: privacyInner, sha256: createHash('sha256').update(privacyInner).digest('hex'), requireReconsent: true },
       ];
       for (const t of targets) {
         const exists = await this.termsDocModel.findOne({ doc: t.doc, version: t.version });

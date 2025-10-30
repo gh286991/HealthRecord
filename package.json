@@ -40,6 +40,7 @@
     "minio": "^8.0.5",
     "mongoose": "^8.16.0",
     "multer": "^2.0.1",
+    "marked": "^12.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",

@@ -3,11 +3,11 @@ import { Document } from 'mongoose';
 
 export type TermsDocDocument = TermsDoc & Document;
 
-export type LegalDocType = 'terms' | 'privacy';
+export type LegalDocType = 'terms' | 'privacy' | 'cookies';
 
 @Schema({ timestamps: true, collection: 'terms_docs' })
 export class TermsDoc {
-  @Prop({ required: true, enum: ['terms', 'privacy'] })
+  @Prop({ required: true, enum: ['terms', 'privacy', 'cookies'] })
   doc: LegalDocType;
 
   // 例如 v1.2
@@ -22,6 +22,10 @@ export class TermsDoc {
   @Prop({ required: false })
   contentHtml?: string;
 
+  // 同步保存 Markdown 原文（可選）
+  @Prop({ required: false })
+  contentMd?: string;
+
   // 或僅存檔案位址（例如 CDN）
   @Prop({ required: false, trim: true })
   fileUrl?: string;
@@ -29,6 +33,10 @@ export class TermsDoc {
   // 內容雜湊，證明未被改動
   @Prop({ required: false, trim: true })
   sha256?: string;
+
+  // Markdown 內容雜湊（對應 contentMd）
+  @Prop({ required: false, trim: true })
+  sha256Md?: string;
 
   // 是否需要重新同意（實質變更）
   @Prop({ type: Boolean, default: false })
@@ -38,4 +46,3 @@ export class TermsDoc {
 export const TermsDocSchema = SchemaFactory.createForClass(TermsDoc);
 
 TermsDocSchema.index({ doc: 1, version: 1 }, { unique: true });
-

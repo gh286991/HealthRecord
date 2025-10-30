@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { TermsDoc, TermsDocDocument } from './schemas/terms-doc.schema';
+import { TermsDoc, TermsDocDocument, LegalDocType } from './schemas/terms-doc.schema';
 import { UserAgreement, UserAgreementDocument } from './schemas/user-agreement.schema';
 
 @Injectable()
@@ -24,7 +24,7 @@ export class LegalService {
     return pa.minor - pb.minor;
   }
 
-  async getLatest(doc: 'terms' | 'privacy') {
+  async getLatest(doc: LegalDocType) {
     // 以 effectiveDate DESC, 其次用版本號排序
     const list = await this.termsDocModel.find({ doc }).sort({ effectiveDate: -1, createdAt: -1 }).lean();
     if (!list.length) throw new NotFoundException('No legal document found');
@@ -40,19 +40,19 @@ export class LegalService {
     return latest;
   }
 
-  async getByVersion(doc: 'terms' | 'privacy', version: string) {
+  async getByVersion(doc: LegalDocType, version: string) {
     const found = await this.termsDocModel.findOne({ doc, version }).lean();
     if (!found) throw new NotFoundException('Document version not found');
     return found;
   }
 
-  async listAll(doc: 'terms' | 'privacy') {
+  async listAll(doc: LegalDocType) {
     return this.termsDocModel.find({ doc }).sort({ effectiveDate: -1 }).lean();
   }
 
   async recordAgreement(params: {
     userId: string;
-    doc: 'terms' | 'privacy';
+    doc: LegalDocType;
     version: string;
     agreedAt?: Date;
     ip?: string;
@@ -69,5 +69,37 @@ export class LegalService {
     await record.save();
     return record.toObject();
   }
-}
 
+  async publishDoc(params: {
+    doc: LegalDocType;
+    version: string;
+    html?: string;
+    sha256?: string;
+    md?: string;
+    sha256Md?: string;
+    effectiveDate: Date;
+    requireReconsent: boolean;
+    forceUpdate?: boolean;
+  }) {
+    const existing = await this.termsDocModel.findOne({ doc: params.doc, version: params.version });
+    const model: Partial<TermsDoc> = {
+      doc: params.doc,
+      version: params.version,
+      effectiveDate: params.effectiveDate,
+      contentHtml: params.html,
+      sha256: params.sha256,
+      contentMd: params.md,
+      sha256Md: params.sha256Md,
+      requireReconsent: params.requireReconsent,
+    } as Partial<TermsDoc>;
+    if (existing) {
+      if (!params.forceUpdate) {
+        throw new Error('Version already exists');
+      }
+      await this.termsDocModel.updateOne({ _id: existing._id }, { $set: model });
+      return { ok: true, overwritten: true };
+    }
+    await this.termsDocModel.create(model);
+    return { ok: true, overwritten: false };
+  }
+}
