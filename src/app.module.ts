@@ -13,6 +13,7 @@ import { AiPromptModule } from './ai-prompt/ai-prompt.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BodyRecordModule } from './body-record/body-record.module';
 import { LegalModule } from './legal/legal.module';
+import { PwaModule } from './pwa/pwa.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { LegalModule } from './legal/legal.module';
     DashboardModule,
     BodyRecordModule,
     LegalModule,
+    PwaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
