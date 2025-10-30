@@ -12,6 +12,7 @@ import { AiLoggingModule } from './ai-logging/ai-logging.module';
 import { AiPromptModule } from './ai-prompt/ai-prompt.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { BodyRecordModule } from './body-record/body-record.module';
+import { LegalModule } from './legal/legal.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { BodyRecordModule } from './body-record/body-record.module';
     AiPromptModule,
     DashboardModule,
     BodyRecordModule,
+    LegalModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,11 +6,15 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { TermsDoc, TermsDocDocument } from '../legal/schemas/terms-doc.schema';
+import { UserAgreement, UserAgreementDocument } from '../legal/schemas/user-agreement.schema';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(TermsDoc.name) private termsDocModel: Model<TermsDocDocument>,
+    @InjectModel(UserAgreement.name) private userAgreementModel: Model<UserAgreementDocument>,
     private jwtService: JwtService,
   ) {}
 
@@ -24,8 +28,41 @@ export class AuthService {
       throw new ConflictException('Username or email already exists');
     }
 
-    const user = new this.userModel({ username, password, email });
+    // 記錄用戶同意服務條款和隱私權政策的時間（向後相容欄位）
+    const now = new Date();
+    const user = new this.userModel({ 
+      username, 
+      password, 
+      email,
+      termsAcceptedAt: now,
+      privacyAcceptedAt: now,
+    });
     await user.save();
+
+    // 另存不可變更的 user_agreements（若已配置文件庫）
+    try {
+      const latestTerms = await this.termsDocModel
+        .find({ doc: 'terms' })
+        .sort({ effectiveDate: -1, createdAt: -1 })
+        .limit(1);
+      const latestPrivacy = await this.termsDocModel
+        .find({ doc: 'privacy' })
+        .sort({ effectiveDate: -1, createdAt: -1 })
+        .limit(1);
+
+      const agreements: Partial<UserAgreement>[] = [];
+      if (latestTerms?.[0]) {
+        agreements.push({ userId: user._id, doc: 'terms', version: latestTerms[0].version, agreedAt: now });
+      }
+      if (latestPrivacy?.[0]) {
+        agreements.push({ userId: user._id, doc: 'privacy', version: latestPrivacy[0].version, agreedAt: now });
+      }
+      if (agreements.length) {
+        await this.userAgreementModel.insertMany(agreements);
+      }
+    } catch {
+      // 若法律文件尚未建立，略過，不影響註冊
+    }
 
     return { message: 'User registered successfully' };
   }

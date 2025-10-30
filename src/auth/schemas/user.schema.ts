@@ -90,6 +90,18 @@ export class User {
   // OAuth provider unique id
   @Prop({ required: false, trim: true })
   providerId?: string;
+
+  // 服務條款同意時間
+  @Prop({ type: Date, default: null })
+  termsAcceptedAt?: Date;
+
+  // 隱私權政策同意時間
+  @Prop({ type: Date, default: null })
+  privacyAcceptedAt?: Date;
+
+  // Cookie 同意狀態
+  @Prop({ type: String, default: null, enum: ['accepted', 'declined'] })
+  cookieConsent?: 'accepted' | 'declined';
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
