@@ -55,7 +55,7 @@ export class LegalService {
     doc: LegalDocType;
     version: string;
     agreedAt?: Date;
-    ip?: string;
+    ip: string;
     userAgent?: string;
   }) {
     const record = new this.userAgreementModel({

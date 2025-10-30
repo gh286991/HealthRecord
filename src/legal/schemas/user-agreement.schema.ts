@@ -18,8 +18,8 @@ export class UserAgreement {
   @Prop({ required: true, type: Date })
   agreedAt: Date;
 
-  @Prop({ required: false, trim: true })
-  ip?: string;
+  @Prop({ required: true, trim: true })
+  ip: string;
 
   @Prop({ required: false, trim: true })
   userAgent?: string;
@@ -28,4 +28,3 @@ export class UserAgreement {
 export const UserAgreementSchema = SchemaFactory.createForClass(UserAgreement);
 
 UserAgreementSchema.index({ userId: 1, doc: 1, agreedAt: -1 });
-

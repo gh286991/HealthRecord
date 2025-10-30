@@ -39,30 +39,7 @@ export class AuthService {
     });
     await user.save();
 
-    // 另存不可變更的 user_agreements（若已配置文件庫）
-    try {
-      const latestTerms = await this.termsDocModel
-        .find({ doc: 'terms' })
-        .sort({ effectiveDate: -1, createdAt: -1 })
-        .limit(1);
-      const latestPrivacy = await this.termsDocModel
-        .find({ doc: 'privacy' })
-        .sort({ effectiveDate: -1, createdAt: -1 })
-        .limit(1);
-
-      const agreements: Partial<UserAgreement>[] = [];
-      if (latestTerms?.[0]) {
-        agreements.push({ userId: user._id, doc: 'terms', version: latestTerms[0].version, agreedAt: now });
-      }
-      if (latestPrivacy?.[0]) {
-        agreements.push({ userId: user._id, doc: 'privacy', version: latestPrivacy[0].version, agreedAt: now });
-      }
-      if (agreements.length) {
-        await this.userAgreementModel.insertMany(agreements);
-      }
-    } catch {
-      // 若法律文件尚未建立，略過，不影響註冊
-    }
+    // 同意紀錄改由前端明確呼叫 /agreements，並在後端以 IP + UA 紀錄（避免缺少 IP）
 
     return { message: 'User registered successfully' };
   }
