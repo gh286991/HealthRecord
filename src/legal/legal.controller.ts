@@ -44,6 +44,16 @@ function htmlWrapper(params: {
 export class LegalController {
   constructor(private readonly legalService: LegalService) {}
 
+  private async triggerFrontendRevalidate() {
+    try {
+      const feBase = process.env.FRONTEND_URL?.replace(/\/$/, '') || '';
+      const secret = process.env.FE_REVALIDATE_SECRET || process.env.REVALIDATE_SECRET || '';
+      if (!feBase || !secret) return;
+      const url = `${feBase}/api/revalidate/legal`;
+      await fetch(`${url}?token=${encodeURIComponent(secret)}`, { method: 'POST' }).catch(() => undefined);
+    } catch {}
+  }
+
   // 302: /terms/latest → /terms/vX.Y
   @Get('terms/latest')
   async termsLatest(@Res() res: Response) {
@@ -121,13 +131,31 @@ export class LegalController {
 
   // 供前端記錄使用者同意（以 token 判斷 userId 的情境下可再加上守衛）
   @Post('agreements')
-  async createAgreement(@Body() body: { userId: string; doc: LegalDocType; version?: string }, @Req() req: Request) {
+  @ApiOperation({ summary: '記錄使用者同意', description: '記錄使用者對 terms/privacy/cookies 的同意。未登入可用 visitorId（匿名）。未提供 version 時會自動取對應文件的最新版本。' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: '已登入使用者的 ID（userId 或 ObjectId 字串）' },
+        visitorId: { type: 'string', description: '未登入訪客的匿名識別碼（前端 localStorage）' },
+        doc: { type: 'string', enum: ['terms','privacy','cookies'], description: '文件類型' },
+        version: { type: 'string', example: 'v0.3', description: '文件版本，省略時使用最新' },
+      },
+      required: ['doc'],
+    },
+  })
+  @ApiOkResponse({ description: '已建立同意紀錄', schema: { example: { _id: '...', userId: '...', visitorId: null, doc: 'cookies', version: 'v0.3', agreedAt: '2026-06-01T00:00:00.000Z', ip: '1.2.3.4', userAgent: '...' } } })
+  async createAgreement(@Body() body: { userId?: string; visitorId?: string; doc: LegalDocType; version?: string }, @Req() req: Request) {
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip;
     const userAgent = req.headers['user-agent'] as string;
+    if (!body?.userId && !body?.visitorId) {
+      throw new BadRequestException('userId or visitorId is required');
+    }
     // 若未指定版本，使用最新版本
     const version = body.version || (await this.legalService.getLatest(body.doc)).version;
     return this.legalService.recordAgreement({
       userId: body.userId,
+      visitorId: body.visitorId,
       doc: body.doc,
       version,
       ip,
@@ -137,17 +165,27 @@ export class LegalController {
 
   // 提供前端查詢目前 latest 版本（避免硬編碼）
   @Get('legal/latest-versions')
+  @ApiOperation({ summary: '查詢最新版本', description: '回傳 terms/privacy/cookies 的最新版本與生效日（若存在）。' })
+  @ApiOkResponse({ schema: { example: { terms: 'v0.3', privacy: 'v0.4', cookies: 'v0.3', termsEffectiveDate: '2026-01-01T00:00:00.000Z', privacyEffectiveDate: '2026-06-01T00:00:00.000Z', cookiesEffectiveDate: '2026-06-01T00:00:00.000Z' } } })
   async latestVersions() {
-    const [terms, privacy] = await Promise.all([
-      this.legalService.getLatest('terms'),
-      this.legalService.getLatest('privacy'),
-    ]);
-    return {
-      terms: terms.version,
-      privacy: privacy.version,
-      termsEffectiveDate: terms.effectiveDate,
-      privacyEffectiveDate: privacy.effectiveDate,
-    };
+    // cookies 可能尚未發佈，逐一嘗試避免 throw 影響整體
+    const result: any = {};
+    try {
+      const terms = await this.legalService.getLatest('terms');
+      result.terms = terms.version;
+      result.termsEffectiveDate = terms.effectiveDate;
+    } catch {}
+    try {
+      const privacy = await this.legalService.getLatest('privacy');
+      result.privacy = privacy.version;
+      result.privacyEffectiveDate = privacy.effectiveDate;
+    } catch {}
+    try {
+      const cookies = await this.legalService.getLatest('cookies');
+      result.cookies = cookies.version;
+      result.cookiesEffectiveDate = cookies.effectiveDate;
+    } catch {}
+    return result;
   }
 
   // 以 API 發佈新版本（上傳 Markdown，後端轉 HTML + sha256）
@@ -202,6 +240,8 @@ export class LegalController {
         requireReconsent,
         forceUpdate,
       });
+      // 後端成功發佈後，觸發前端 revalidate（僅後端持有密鑰，避免在前端暴露）
+      this.triggerFrontendRevalidate();
       return { ok: true, sha256Md, overwritten: result.overwritten };
     } catch (e) {
       if (e instanceof BadRequestException) throw e;
@@ -214,8 +254,10 @@ export class LegalController {
 
   // 提供指定文件與版本的原始內容（JSON）
   @Get('legal/doc/:doc/:version')
-  async readDocJson(@Param('doc') doc: 'terms'|'privacy', @Param('version') version: string) {
-    if (doc !== 'terms' && doc !== 'privacy') {
+  @ApiOperation({ summary: '讀取指定文件版本（JSON）', description: '提供法律文件（terms/privacy/cookies）指定版本的原始內容（Markdown 與/或 HTML）。' })
+  @ApiOkResponse({ schema: { example: { doc: 'privacy', version: 'v0.4', effectiveDate: '2026-06-01T00:00:00.000Z', requireReconsent: true, sha256: null, sha256Md: 'abcdef...', contentHtml: null, contentMd: '# 隱私權政策...', fileUrl: null } } })
+  async readDocJson(@Param('doc') doc: 'terms'|'privacy'|'cookies', @Param('version') version: string) {
+    if (doc !== 'terms' && doc !== 'privacy' && doc !== 'cookies') {
       return { error: 'Invalid doc' };
     }
     const d = await this.legalService.getByVersion(doc, version);
@@ -230,5 +272,15 @@ export class LegalController {
       contentMd: (d as any).contentMd || null,
       fileUrl: d.fileUrl || null,
     };
+  }
+
+  // 由後端對外提供統一的 revalidate 觸發端點（只需要在後端保存密鑰）
+  @UseGuards(AuthGuard('jwt'))
+  @Post('legal/revalidate')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: '觸發前端法律頁面快取更新', description: '後端持有密鑰並轉呼叫前端 /api/revalidate/legal。' })
+  async revalidateFromBackend() {
+    await this.triggerFrontendRevalidate();
+    return { ok: true };
   }
 }

@@ -51,15 +51,20 @@ export class LegalService {
   }
 
   async recordAgreement(params: {
-    userId: string;
+    userId?: string;
+    visitorId?: string;
     doc: LegalDocType;
     version: string;
     agreedAt?: Date;
     ip: string;
     userAgent?: string;
   }) {
+    if (!params.userId && !params.visitorId) {
+      throw new Error('Either userId or visitorId is required');
+    }
     const record = new this.userAgreementModel({
       userId: params.userId,
+      visitorId: params.visitorId,
       doc: params.doc,
       version: params.version,
       agreedAt: params.agreedAt || new Date(),

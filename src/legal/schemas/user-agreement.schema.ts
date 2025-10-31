@@ -6,10 +6,14 @@ export type UserAgreementDocument = UserAgreement & Document;
 
 @Schema({ timestamps: true, collection: 'user_agreements' })
 export class UserAgreement {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
-  userId: any;
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: false, index: true })
+  userId?: any;
 
-  @Prop({ required: true, enum: ['terms', 'privacy'] })
+  // 未登入用戶的匿名識別碼（例如前端 localStorage 產生的 UUID）
+  @Prop({ required: false, trim: true, index: true })
+  visitorId?: string;
+
+  @Prop({ required: true, enum: ['terms', 'privacy', 'cookies'] })
   doc: LegalDocType;
 
   @Prop({ required: true, trim: true })
@@ -28,3 +32,4 @@ export class UserAgreement {
 export const UserAgreementSchema = SchemaFactory.createForClass(UserAgreement);
 
 UserAgreementSchema.index({ userId: 1, doc: 1, agreedAt: -1 });
+UserAgreementSchema.index({ visitorId: 1, doc: 1, agreedAt: -1 });

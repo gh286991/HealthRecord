@@ -20,9 +20,10 @@ export class LegalBootstrap implements OnModuleInit {
       return;
     }
     try {
-      const [termsHtml, privacyHtml] = await Promise.all([
+      const [termsHtml, privacyHtml, cookiesHtml] = await Promise.all([
         fetch(`${FE}/terms`, { cache: 'no-store' }).then(r => r.text()),
         fetch(`${FE}/privacy`, { cache: 'no-store' }).then(r => r.text()),
+        fetch(`${FE}/cookies`, { cache: 'no-store' }).then(r => r.text()).catch(() => ''),
       ]);
       const extractMain = (html: string) => {
         const m = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
@@ -37,10 +38,14 @@ export class LegalBootstrap implements OnModuleInit {
       };
       const termsInner = extractMain(termsHtml);
       const privacyInner = extractMain(privacyHtml);
+      const cookiesInner = cookiesHtml ? extractMain(cookiesHtml) : '';
       const targets: (Partial<TermsDoc> & { doc: LegalDocType })[] = [
         { doc: 'terms', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: termsInner, sha256: createHash('sha256').update(termsInner).digest('hex'), requireReconsent: true },
         { doc: 'privacy', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: privacyInner, sha256: createHash('sha256').update(privacyInner).digest('hex'), requireReconsent: true },
       ];
+      if (cookiesInner) {
+        targets.push({ doc: 'cookies', version: 'v0.3', effectiveDate: new Date('2026-01-01'), contentHtml: cookiesInner, sha256: createHash('sha256').update(cookiesInner).digest('hex'), requireReconsent: false });
+      }
       for (const t of targets) {
         const exists = await this.termsDocModel.findOne({ doc: t.doc, version: t.version });
         if (!exists) {
