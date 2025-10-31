@@ -36,6 +36,29 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
+  // Email-based registration flow
+  @Post('register-email/start')
+  @ApiOperation({ summary: '啟動 Email 註冊（寄出驗證連結）' })
+  async registerEmailStart(@Body() body: { email: string }) {
+    return this.authService.registerEmailStart(body?.email);
+  }
+
+  @Post('register-email/verify')
+  @ApiOperation({ summary: '驗證 Email 註冊 token 是否有效' })
+  async registerEmailVerify(@Body() body: { token: string }) {
+    return this.authService.registerEmailVerify(body?.token);
+  }
+
+  @Post('register-email/complete')
+  @ApiOperation({ summary: '完成 Email 註冊' })
+  async registerEmailComplete(@Body() body: { token: string; username: string; password: string }) {
+    return this.authService.registerEmailComplete({
+      token: body?.token,
+      username: body?.username,
+      password: body?.password,
+    });
+  }
+
   @UseGuards(AuthGuard('local'))
   @Post('login')
   @ApiOperation({ summary: '用戶登入' })
